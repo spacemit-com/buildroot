@@ -163,6 +163,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/vmtouch/Config.in"
 	source "package/whetstone/Config.in"
 	source "package/linpack/Config.in"
+	source "package/stream/Config.in"
 endmenu
 
 menu "Development tools"
