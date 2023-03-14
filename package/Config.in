@@ -167,6 +167,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/csmith/Config.in"
 	source "package/postmark/Config.in"
 	source "package/fhourstones88/Config.in"
+	source "package/blogbench/Config.in"
 endmenu
 
 menu "Development tools"
