@@ -165,6 +165,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/linpack/Config.in"
 	source "package/stream/Config.in"
 	source "package/csmith/Config.in"
+	source "package/postmark/Config.in"
 endmenu
 
 menu "Development tools"
