@@ -164,6 +164,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/whetstone/Config.in"
 	source "package/linpack/Config.in"
 	source "package/stream/Config.in"
+	source "package/csmith/Config.in"
 endmenu
 
 menu "Development tools"
