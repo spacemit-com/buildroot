@@ -166,6 +166,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/stream/Config.in"
 	source "package/csmith/Config.in"
 	source "package/postmark/Config.in"
+	source "package/fhourstones88/Config.in"
 endmenu
 
 menu "Development tools"
