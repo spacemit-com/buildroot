@@ -169,6 +169,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/fhourstones88/Config.in"
 	source "package/blogbench/Config.in"
 	source "package/tachyon/Config.in"
+	source "package/swetest/Config.in"
 endmenu
 
 menu "Development tools"
