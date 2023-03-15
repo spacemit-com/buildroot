@@ -168,6 +168,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/postmark/Config.in"
 	source "package/fhourstones88/Config.in"
 	source "package/blogbench/Config.in"
+	source "package/tachyon/Config.in"
 endmenu
 
 menu "Development tools"
