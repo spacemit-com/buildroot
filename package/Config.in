@@ -177,6 +177,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/cray/Config.in"
 	source "package/himeno/Config.in"
 	source "package/smallpt/Config.in"
+	source "package/fsmark/Config.in"
 endmenu
 
 menu "Development tools"
