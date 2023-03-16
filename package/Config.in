@@ -183,6 +183,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/aobench/Config.in"
 	source "package/m-queens/Config.in"
 	source "package/tscp/Config.in"
+	source "package/sysbench/Config.in"
 endmenu
 
 menu "Development tools"
@@ -2177,6 +2178,7 @@ endif
 	source "package/uvw/Config.in"
 	source "package/volk/Config.in"
 	source "package/xapian/Config.in"
+	source "package/ck/Config.in"
 endmenu
 
 menu "Security"
