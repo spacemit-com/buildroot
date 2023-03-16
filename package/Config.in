@@ -182,6 +182,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/dcraw/Config.in"
 	source "package/aobench/Config.in"
 	source "package/m-queens/Config.in"
+	source "package/tscp/Config.in"
 endmenu
 
 menu "Development tools"
