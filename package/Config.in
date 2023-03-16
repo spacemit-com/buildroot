@@ -179,6 +179,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/smallpt/Config.in"
 	source "package/fsmark/Config.in"
 	source "package/tiobench/Config.in"
+	source "package/dcraw/Config.in"
 endmenu
 
 menu "Development tools"
