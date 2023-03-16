@@ -180,6 +180,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/fsmark/Config.in"
 	source "package/tiobench/Config.in"
 	source "package/dcraw/Config.in"
+	source "package/aobench/Config.in"
 endmenu
 
 menu "Development tools"
