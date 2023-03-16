@@ -184,6 +184,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/m-queens/Config.in"
 	source "package/tscp/Config.in"
 	source "package/sysbench/Config.in"
+	source "package/stockfish/Config.in"
 	source "package/nbench/Config.in"
 endmenu
 
