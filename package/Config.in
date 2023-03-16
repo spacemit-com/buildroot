@@ -175,6 +175,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/clomp/Config.in"
 	source "package/lzbench/Config.in"
 	source "package/cray/Config.in"
+	source "package/himeno/Config.in"
 endmenu
 
 menu "Development tools"
