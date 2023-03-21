@@ -187,6 +187,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/stockfish/Config.in"
 	source "package/nbench/Config.in"
 	source "package/mibench/Config.in"
+	source "package/tachyon/Config.in"
 endmenu
 
 menu "Development tools"
