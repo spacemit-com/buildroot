@@ -190,6 +190,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/tachyon/Config.in"
 	source "package/aom-av1-psy/Config.in"
 	source "package/primesieve/Config.in"
+	source "package/telebench/Config.in"
 endmenu
 
 menu "Development tools"
