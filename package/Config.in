@@ -188,6 +188,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/nbench/Config.in"
 	source "package/mibench/Config.in"
 	source "package/tachyon/Config.in"
+	source "package/aom-av1-psy/Config.in"
 endmenu
 
 menu "Development tools"
