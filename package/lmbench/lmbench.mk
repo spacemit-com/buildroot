@@ -40,7 +40,10 @@ define LMBENCH_BUILD_CMDS
 endef
 
 define LMBENCH_INSTALL_TARGET_CMDS
+	$(INSTALL) -d $(TARGET_DIR)/usr/bin/scripts
 	$(TARGET_MAKE_ENV) $(MAKE) CFLAGS="$(TARGET_CFLAGS)" OS=$(ARCH) CC="$(TARGET_CC)" BASE=$(TARGET_DIR)/usr -C $(@D)/src install
+	cp -rf $(@D)/scripts/* $(TARGET_DIR)/usr/bin/scripts
+
 endef
 
 $(eval $(generic-package))
