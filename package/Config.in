@@ -192,6 +192,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/primesieve/Config.in"
 	source "package/telebench/Config.in"
 	source "package/oabenchv2/Config.in"
+	source "package/xsbench/Config.in"
 endmenu
 
 menu "Development tools"
