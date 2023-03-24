@@ -18,10 +18,10 @@ endef
 
 define MAFFT_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0755 $(@D)/core/mafft $(TARGET_DIR)/usr/bin
-	mkdir $(TARGET_DIR)/usr/bin/binaries/
-	mkdir $(TARGET_DIR)/usr/bin/scripts/
-	$(INSTALL) -D -m 0755 $(@D)/binaries/* $(TARGET_DIR)/usr/bin/binaries/
-	$(INSTALL) -D -m 0755 $(@D)/scripts/* $(TARGET_DIR)/usr/bin/scripts/
+	$(INSTALL) -d $(TARGET_DIR)/usr/bin/binaries/
+	$(INSTALL) -d $(TARGET_DIR)/usr/bin/scripts/
+	cp -rf $(@D)/binaries/* $(TARGET_DIR)/usr/bin/binaries/
+	cp -rf $(@D)/scripts/* $(TARGET_DIR)/usr/bin/scripts/
 
 endef
 
