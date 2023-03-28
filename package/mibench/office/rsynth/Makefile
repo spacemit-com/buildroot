@@ -2,7 +2,7 @@
 # $Id: Makefile.in,v 1.3 1994/11/08 13:30:50 a904209 Exp a904209 $
 
 SRCDIR       = .
-CC           = /home/maguoqun/workspace/build_root_bench/buildroot/output/host/bin/riscv64-unknown-linux-gnu-gcc
+CC           ?= gcc
 PREFIX       = ./local
 BIN_DIR      = $(PREFIX)/bin
 LIB_DIR      = $(PREFIX)/lib/dict
