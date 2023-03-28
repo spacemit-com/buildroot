@@ -38,7 +38,7 @@ NULL	=
 CC	?= gcc #/usr/bin/gcc
 AR	= ar
 AROPTS	= rc
-RANLIB	= /home/maguoqun/workspace/build_root_bench/buildroot/output/host/bin/riscv64-unknown-linux-gnu-gcc-ranlib
+RANLIB	= ranlib
 INSTALL	= ${SHELL} ../port/install.sh
 
 #
