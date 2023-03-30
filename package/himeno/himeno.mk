@@ -13,7 +13,7 @@ HIMENO_LDFLAGS += $(TARGET_LDFLAGS) -lmpi
 
 define HIMENO_BUILD_CMDS
 	$(TARGET_MAKE_ENV) cp $(@D)/Makefile.sample $(@D)/Makefile
-	$(TARGET_MAKE_ENV) $(@D)/paramset.sh M 1 1 2
+	(cd $(@D);$(TARGET_MAKE_ENV) $(@D)/paramset.sh M 1 1 2;)
 	$(TARGET_MAKE_ENV) $(MAKE1) CC="$(TARGET_CC) $(TARGET_CFLAGS) $(HIMENO_LDFLAGS)" \
 		-C $(@D) all
 endef
