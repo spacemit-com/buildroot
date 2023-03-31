@@ -14,10 +14,9 @@ CRAY_CONF_OPTS = -DBUILD_TESTING=ON \
 
 # TODO enable SDL2######
 
-#define CRAY_BUILD_CMDS
-#	$(TARGET_MAKE_ENV) $(MAKE1) CC="$(TARGET_CC) $(CFLAGS) $(TARGET_LDFLAGS)" \
-#		-C $(@D) all
-#endef
+define CRAY_BUILD_CMDS
+	(cd $(@D); ./rebuild/testing-on;)
+endef
 
 
 define CRAY_INSTALL_TARGET_CMDS
