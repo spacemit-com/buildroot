@@ -193,6 +193,7 @@ menu "Debugging, profiling and benchmark"
 	source "package/telebench/Config.in"
 	source "package/oabenchv2/Config.in"
 	source "package/xsbench/Config.in"
+	source "package/ncnn/Config.in"
 endmenu
 
 menu "Development tools"
