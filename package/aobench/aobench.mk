@@ -14,7 +14,7 @@ AOBENCH_INSTALL_TARGET = YES
 define AOBENCH_BUILD_CMDS
 
 	$(TARGET_MAKE_ENV) $(TARGET_CC) $(TARGET_CFLAGS) $(AOBENCH_LDFLAGS)\
-		-c $(@D)/ao.c -o $(@D)/aobench
+		$(@D)/ao.c -o $(@D)/aobench
 endef
 
 define AOBENCH_INSTALL_TARGET_CMDS
