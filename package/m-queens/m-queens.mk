@@ -14,10 +14,10 @@ M_QUEENS_INSTALL_TARGET = YES
 define M_QUEENS_BUILD_CMDS
 
 	$(TARGET_MAKE_ENV) $(TARGET_CC) $(TARGET_CFLAGS) $(TARGET_LDFLAGS)\
-		-c $(@D)/main.c -o $(@D)/m-queens
+		$(@D)/main.c -o $(@D)/m-queens
 	
 	$(TARGET_MAKE_ENV) $(TARGET_CC) $(M_QUEENS_CFLAGS) $(TARGET_LDFLAGS)\
-		-c $(@D)/main.c -o $(@D)/m-queens-openmp
+		$(@D)/main.c -o $(@D)/m-queens-openmp
 endef
 
 define M_QUEENS_INSTALL_TARGET_CMDS
