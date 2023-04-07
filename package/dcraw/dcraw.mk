@@ -14,7 +14,7 @@ DCRAW_INSTALL_TARGET = YES
 define DCRAW_BUILD_CMDS
 
 	$(TARGET_MAKE_ENV) $(TARGET_CC) $(TARGET_CFLAGS) $(DCRAW_LDFLAGS)\
-		-c $(@D)/dcraw.c -o $(@D)/dcraw
+		$(@D)/dcraw.c -o $(@D)/dcraw
 endef
 
 define DCRAW_INSTALL_TARGET_CMDS
