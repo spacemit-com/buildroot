@@ -10,11 +10,10 @@ SMALLPT_SITE_METHOD = git
 SMALLPT_INSTALL_TARGET = YES
 
 define SMALLPT_BUILD_CMDS
-
-	$(TARGET_MAKE_ENV) $(TARGET_CC) $(TARGET_CFLAGS) $(TARGET_LDFLAGS) \
-		-I$(@D)/c-smallpt/c-smallpt/src/ \
-		-c $(@D)/c-smallpt/c-smallpt/src/c-smallpt.c \
-		-o $(@D)/c-smallpt/c-smallpt/src/smallpt
+	cp -f package/smallpt/vector.h $(@D)/c-smallpt/c-smallpt/src/
+	cp -f package/smallpt/imageio.h $(@D)/c-smallpt/c-smallpt/src/
+	(cd $(@D)/c-smallpt/c-smallpt/src;$(TARGET_MAKE_ENV) $(TARGET_CC)\
+	 -O3 c-smallpt.c -I. -lm -o smallpt;)
 endef
 
 define SMALLPT_INSTALL_TARGET_CMDS
