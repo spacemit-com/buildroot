@@ -1,0 +1,319 @@
+/dts-v1/;
+
+/memreserve/	0x0000000040000000 0x0000000002000000;
+/ {
+	#address-cells = <0x02>;
+	#size-cells = <0x02>;
+	compatible = "riscv-spacemit";
+	model = "riscv-spacemit,stev10";
+
+	reserved-memory {
+		#address-cells = <0x02>;
+		#size-cells = <0x02>;
+		ranges;
+
+		mmode_pmp0@40000000 {
+			reg = <0x00 0x40000000 0x00 0x40000>;
+			no-map;
+		};
+	};
+
+	aliases {
+		uart0 = "/soc/uart@10010000";
+	};
+
+	chosen {
+		bootargs = "console=hvc0 earlycon=sbi rdinit=/sbin/init";
+	};
+
+	cpus {
+		#address-cells = <0x01>;
+		#size-cells = <0x00>;
+		timebase-frequency = <0x2faf080>;
+
+		cpu-map {
+
+			cluster0 {
+
+				core0 {
+					cpu = <0x01>;
+				};
+
+				core1 {
+					cpu = <0x02>;
+				};
+
+				core2 {
+					cpu = <0x03>;
+				};
+
+				core3 {
+					cpu = <0x04>;
+				};
+			};
+
+			cluster1 {
+
+				core4 {
+					cpu = <0x05>;
+				};
+
+				core5 {
+					cpu = <0x06>;
+				};
+
+				core6 {
+					cpu = <0x07>;
+				};
+
+				core7 {
+					cpu = <0x08>;
+				};
+			};
+		};
+
+		cpu@0 {
+			device_type = "cpu";
+			reg = <0x00>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcvhsu_zicbom_svpbmt_sstc";
+			mmu-type = "riscv,sv48";
+			cpu-ai = "true";
+			riscv,cbom-block-size = <0x40>;
+			cpu-cacheline = "64Bytes";
+			phandle = <0x01>;
+
+			interrupt-controller {
+				#interrupt-cells = <0x01>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+				phandle = <0x0a>;
+			};
+		};
+
+		cpu@1 {
+			device_type = "cpu";
+			reg = <0x01>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcvhsu_zicbom_svpbmt_sstc";
+			mmu-type = "riscv,sv48";
+			cpu-ai = "true";
+			riscv,cbom-block-size = <0x40>;
+			cpu-cacheline = "64Bytes";
+			phandle = <0x02>;
+
+			interrupt-controller {
+				#interrupt-cells = <0x01>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+				phandle = <0x0b>;
+			};
+		};
+
+		cpu@2 {
+			device_type = "cpu";
+			reg = <0x02>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcvhsu_zicbom_svpbmt_sstc";
+			mmu-type = "riscv,sv48";
+			cpu-ai = "true";
+			riscv,cbom-block-size = <0x40>;
+			cpu-cacheline = "64Bytes";
+			phandle = <0x03>;
+
+			interrupt-controller {
+				#interrupt-cells = <0x01>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+				phandle = <0x0c>;
+			};
+		};
+
+		cpu@3 {
+			device_type = "cpu";
+			reg = <0x03>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcvhsu_zicbom_svpbmt_sstc";
+			mmu-type = "riscv,sv48";
+			cpu-ai = "true";
+			riscv,cbom-block-size = <0x40>;
+			cpu-cacheline = "64Bytes";
+			phandle = <0x04>;
+
+			interrupt-controller {
+				#interrupt-cells = <0x01>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+				phandle = <0x0d>;
+			};
+		};
+
+		cpu@4 {
+			device_type = "cpu";
+			reg = <0x04>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcvhsu_zicbom_svpbmt_sstc";
+			mmu-type = "riscv,sv48";
+			riscv,cbom-block-size = <0x40>;
+			cpu-cacheline = "64Bytes";
+			phandle = <0x05>;
+
+			interrupt-controller {
+				#interrupt-cells = <0x01>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+				phandle = <0x0e>;
+			};
+		};
+
+		cpu@5 {
+			device_type = "cpu";
+			reg = <0x05>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcvhsu_zicbom_svpbmt_sstc";
+			mmu-type = "riscv,sv48";
+			riscv,cbom-block-size = <0x40>;
+			cpu-cacheline = "64Bytes";
+			phandle = <0x06>;
+
+			interrupt-controller {
+				#interrupt-cells = <0x01>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+				phandle = <0x0f>;
+			};
+		};
+
+		cpu@6 {
+			device_type = "cpu";
+			reg = <0x06>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcvhsu_zicbom_svpbmt_sstc";
+			mmu-type = "riscv,sv48";
+			riscv,cbom-block-size = <0x40>;
+			cpu-cacheline = "64Bytes";
+			phandle = <0x07>;
+
+			interrupt-controller {
+				#interrupt-cells = <0x01>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+				phandle = <0x10>;
+			};
+		};
+
+		cpu@7 {
+			device_type = "cpu";
+			reg = <0x07>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64imafdcvhsu_zicbom_svpbmt_sstc";
+			mmu-type = "riscv,sv48";
+			riscv,cbom-block-size = <0x40>;
+			cpu-cacheline = "64Bytes";
+			phandle = <0x08>;
+
+			interrupt-controller {
+				#interrupt-cells = <0x01>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+				phandle = <0x11>;
+			};
+		};
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x00 0x40000000 0x00 0xc0000000>;
+	};
+
+	soc {
+		#address-cells = <0x02>;
+		#size-cells = <0x02>;
+		compatible = "simple-bus";
+		ranges;
+
+		uart@10010000 {
+			interrupts = <0x10>;
+			interrupt-parent = <0x09>;
+			clock-frequency = <0x2faf080>;
+			reg = <0x00 0x10010000 0x00 0x1000>;
+			reg-io-width = <0x04>;
+			reg-shift = <0x02>;
+			hw-flow-control = "unsupport";
+			compatible = "snps,dw-apb-uart";
+			status = "disabled";
+		};
+
+		tcm@38000000 {
+			compatible = "spacemit,k1-pro-tcm";
+			reg = <0x00 0x38000000 0x00 0x80000>;
+			#address-cells = <0x01>;
+			#size-cells = <0x01>;
+			ranges = <0x00 0x00 0x38000000 0x80000>;
+			no-memory-wc;
+
+			core0_tcm@0 {
+				reg = <0x00 0x20000>;
+				pool;
+			};
+
+			core1_tcm@20000 {
+				reg = <0x20000 0x20000>;
+				pool;
+			};
+
+			core2_tcm@40000 {
+				reg = <0x40000 0x20000>;
+				pool;
+			};
+
+			core3_tcm@60000 {
+				reg = <0x60000 0x20000>;
+				pool;
+			};
+		};
+
+		interrupt-controller@30000000 {
+			reg = <0x00 0x30000000 0x00 0x8000000>;
+			interrupts-extended = <0x0a 0xffffffff 0x0a 0x09 0x0b 0xffffffff 0x0b 0x09 0x0c 0xffffffff 0x0c 0x09 0x0d 0xffffffff 0x0d 0x09 0x0e 0xffffffff 0x0e 0x09 0x0f 0xffffffff 0x0f 0x09 0x10 0xffffffff 0x10 0x09 0x11 0xffffffff 0x11 0x09>;
+			interrupt-controller;
+			riscv,ndev = <0xa0>;
+			riscv,max-priority = <0x07>;
+			compatible = "riscv,plic0";
+			#interrupt-cells = <0x01>;
+			#address-cells = <0x00>;
+			phandle = <0x09>;
+		};
+
+		dma-controller@10030000 {
+			compatible = "snps,dma-spear1340";
+			reg = <0x00 0x10030000 0x00 0x1000>;
+			interrupt-parent = <0x09>;
+			interrupts = <0x15>;
+			dma-masters = <0x01>;
+			dma-channels = <0x08>;
+			chan_allocation_order = <0x00>;
+			chan_priority = <0x00>;
+			block_size = <0x7ff>;
+			data-width = <0x04 0x04 0x04 0x04>;
+			snps,dma-protection-control = <0x01>;
+			snps,max-burst-len = <0x10 0x10 0x10 0x10 0x10 0x10 0x10 0x10>;
+			status = "okay";
+		};
+
+		clint@34000000 {
+			interrupts-extended = <0x0a 0xffffffff 0x0a 0xffffffff 0x0b 0xffffffff 0x0b 0xffffffff 0x0c 0xffffffff 0x0c 0xffffffff 0x0d 0xffffffff 0x0d 0xffffffff 0x0e 0xffffffff 0x0e 0xffffffff 0x0f 0xffffffff 0x0f 0xffffffff 0x10 0xffffffff 0x10 0xffffffff 0x11 0xffffffff 0x11 0xffffffff>;
+			reg = <0x00 0x34000000 0x00 0x10000>;
+			compatible = "riscv,clint0";
+			clint,has-no-64bit-mmio;
+		};
+	};
+};
