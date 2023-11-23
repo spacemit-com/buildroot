@@ -17,7 +17,7 @@ define AOM_AV1_PSY_BUILD_CMDS
 	rm -f $(@D)/CMakeCache.txt $(@D)/CMakeFiles
 	
 	(cd $(AOM_AV1_PSY_BUILDDIR);$(TARGET_MAKE_ENV) cmake $(@D) \
- 	-G"Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE="$(TOPDIR)/output/host/share/buildroot/toolchainfile.cmake" \
+ 	-G"Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE="$(HOST_DIR)/share/buildroot/toolchainfile.cmake" \
  	-DCMAKE_INSTALL_PREFIX="./usr" -DCMAKE_INSTALL_RUNSTATEDIR="/run" -DCMAKE_COLOR_MAKEFILE=OFF \
  	-DBUILD_DOC=OFF -DBUILD_DOCS=OFF -DBUILD_EXAMPLE=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TEST=OFF \
  	-DBUILD_TESTS=OFF -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=ON;$(MAKE) all;	$(MAKE) install)
