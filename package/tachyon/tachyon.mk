@@ -12,7 +12,6 @@ TACHYON_INSTALL_TARGET = YES
 TACHYON_CFLAGS = $(TARGET_CFLAGS) -Wall -ffast-math -DLinux
 
 define TACHYON_BUILD_CMDS
-	cp -f package/tachyon/Make-arch $(@D)/unix/
 	(cd $(@D)/unix; $(TARGET_MAKE_ENV) $(MAKE1) CC=$(TARGET_CC) linux-riscv64 ;)
 
 endef
