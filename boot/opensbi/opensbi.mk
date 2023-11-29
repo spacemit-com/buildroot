@@ -81,6 +81,8 @@ define OPENSBI_INSTALL_IMAGES_CMDS
 			$(BINARIES_DIR)/fw_$(f).bin
 		$(INSTALL) -m 0644 -D $(@D)/build/platform/$(OPENSBI_PLAT)/firmware/fw_$(f).elf \
 			$(BINARIES_DIR)/fw_$(f).elf
+		$(INSTALL) -m 0644 -D $(@D)/build/platform/$(OPENSBI_PLAT)/firmware/fw_$(f).itb \
+			$(BINARIES_DIR)/fw_$(f).itb
 	)
 endef
 endif
