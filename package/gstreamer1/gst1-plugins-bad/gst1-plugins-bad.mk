@@ -73,7 +73,8 @@ GST1_PLUGINS_BAD_CONF_OPTS += \
 	-Dmagicleap=disabled \
 	-Disac=disabled \
 	-Diqa=disabled \
-	-Dopencv=disabled
+	-Dopencv=disabled \
+	-Dtinyalsa=disabled
 
 GST1_PLUGINS_BAD_DEPENDENCIES = gst1-plugins-base gstreamer1
 
@@ -816,6 +817,14 @@ GST1_PLUGINS_BAD_CONF_OPTS += -Dzxing=enabled
 GST1_PLUGINS_BAD_DEPENDENCIES += zxing-cpp
 else
 GST1_PLUGINS_BAD_CONF_OPTS += -Dzxing=disabled
+endif
+
+ifeq ($(BR2_PACKAGE_GST1_PLUGINS_BAD_SPACEMIT),y)
+GST1_PLUGINS_BAD_CONF_OPTS += -Dspacemit=enabled
+GST1_PLUGINS_BAD_DEPENDENCIES += mpp
+GST1_PLUGINS_BAD_DEPENDENCIES += k1x-cam
+else
+GST1_PLUGINS_BAD_CONF_OPTS += -Dspacemit=disabled
 endif
 
 # Add GPL license if GPL licensed plugins enabled.

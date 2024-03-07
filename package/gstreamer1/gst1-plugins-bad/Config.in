@@ -733,6 +733,14 @@ config BR2_PACKAGE_GST1_PLUGINS_BAD_ZBAR
 	depends on BR2_TOOLCHAIN_HEADERS_AT_LEAST_3_0 # zbar -> libv4l
 	select BR2_PACKAGE_ZBAR
 
+config BR2_PACKAGE_GST1_PLUGINS_BAD_SPACEMIT
+	bool "Enable gst spacemit codec and source"
+	default y
+	depends on BR2_PACKAGE_MPP
+	depends on BR2_PACKAGE_K1X_CAM
+	help
+	  spacemitcodec and spacemitsrc plugin
+
 comment "zbar plugin needs a toolchain w/ threads, C++ and headers >= 3.0"
 	depends on BR2_USE_MMU
 	depends on !BR2_TOOLCHAIN_HAS_THREADS \
