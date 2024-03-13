@@ -181,4 +181,7 @@ else
 SDL2_CONF_OPTS += --disable-video-kmsdrm
 endif
 
+SDL2_DEPENDENCIES += wayland libxkbcommon
+SDL2_CONF_OPTS += --enable-video-wayland
+
 $(eval $(autotools-package))
