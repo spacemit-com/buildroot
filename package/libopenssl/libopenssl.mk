@@ -64,6 +64,8 @@ define HOST_LIBOPENSSL_CONFIGURE_CMDS
 		zlib-dynamic
 endef
 
+LIBOPENSSL_CFLAGS += -march=rv64gcv
+
 define LIBOPENSSL_CONFIGURE_CMDS
 	cd $(@D); \
 		$(TARGET_CONFIGURE_ARGS) \
