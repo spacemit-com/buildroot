@@ -5,7 +5,7 @@
 ################################################################################
 
 # When updating the version, please also update mesa3d-headers
-MESA3D_VERSION = 22.3.5
+MESA3D_VERSION = 24.0.1
 MESA3D_SOURCE = mesa-$(MESA3D_VERSION).tar.xz
 MESA3D_SITE = https://archive.mesa3d.org
 MESA3D_LICENSE = MIT, SGI, Khronos
@@ -211,6 +211,8 @@ endif
 
 ifeq ($(BR2_PACKAGE_MESA3D_OPENGL_ES),y)
 MESA3D_PROVIDES += $(if $(BR2_PACKAGE_LIBGLVND),,libgles)
+MESA3D_CONF_OPTS += -Dgles1=enabled -Dgles2=enabled
+else ifeq ($(BR2_PACKAGE_IMG_GPU_POWERVR),y)
 MESA3D_CONF_OPTS += -Dgles1=enabled -Dgles2=enabled
 else
 MESA3D_CONF_OPTS += -Dgles1=disabled -Dgles2=disabled
