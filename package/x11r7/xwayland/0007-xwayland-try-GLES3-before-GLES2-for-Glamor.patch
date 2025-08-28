@@ -1,0 +1,60 @@
+From 2046ef3ec18712862198a9520c3add7760b98424 Mon Sep 17 00:00:00 2001
+From: Brendan King <Brendan.King@imgtec.com>
+Date: Thu, 25 Nov 2021 20:08:06 +0000
+Subject: [PATCH 7/9] xwayland: try GLES3 before GLES2 for Glamor
+
+Try OpenGL, OpenGLES3 and OpenGLES2, in that order.
+---
+ hw/xwayland/xwayland-glamor-gbm.c | 28 +++++++++++++++++++++++++++-
+ 1 file changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/hw/xwayland/xwayland-glamor-gbm.c b/hw/xwayland/xwayland-glamor-gbm.c
+index cfcd39a35..4562afd14 100644
+--- a/hw/xwayland/xwayland-glamor-gbm.c
++++ b/hw/xwayland/xwayland-glamor-gbm.c
+@@ -1090,6 +1090,31 @@ xwl_glamor_try_big_gl_api(struct xwl_screen *xwl_screen)
+     return TRUE;
+ }
+ 
++static Bool
++xwl_glamor_try_gles3_api(struct xwl_screen *xwl_screen)
++{
++    const EGLint gles_attribs[] = {
++        EGL_CONTEXT_CLIENT_VERSION,
++        3,
++        EGL_CONTEXT_MINOR_VERSION_KHR,
++        0,
++        EGL_NONE,
++    };
++
++    eglBindAPI(EGL_OPENGL_ES_API);
++
++    xwl_screen->egl_context = eglCreateContext(xwl_screen->egl_display, NULL,
++                                               EGL_NO_CONTEXT, gles_attribs);
++
++    if (!xwl_glamor_try_to_make_context_current(xwl_screen)) {
++        ErrorF("Failed to make EGL context current with GLES3\n");
++        xwl_glamor_maybe_destroy_context(xwl_screen);
++        return FALSE;
++    }
++
++    return TRUE;
++}
++
+ static Bool
+ xwl_glamor_try_gles_api(struct xwl_screen *xwl_screen)
+ {
+@@ -1146,8 +1171,9 @@ xwl_glamor_gbm_init_egl(struct xwl_screen *xwl_screen)
+     }
+ 
+     if (!xwl_glamor_try_big_gl_api(xwl_screen) &&
++        !xwl_glamor_try_gles3_api(xwl_screen) &&
+         !xwl_glamor_try_gles_api(xwl_screen)) {
+-        ErrorF("Cannot use neither GL nor GLES2\n");
++        ErrorF("Cannot use GL, GLES3, nor GLES2\n");
+         goto error;
+     }
+ 
+-- 
+2.34.1
+
