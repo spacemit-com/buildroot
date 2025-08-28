@@ -277,6 +277,18 @@ config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_VIRGL
 	  virgl is the 3D acceleration backend for the virtio-gpu
 	  shipping with qemu.
 
+config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_ZINK
+	bool "Gallium zink driver"
+	depends on BR2_PACKAGE_IMG_GPU_POWERVR
+	select BR2_PACKAGE_MESA3D_GALLIUM_DRIVER
+	select BR2_PACKAGE_MESA3D_VULKAN_DRIVER
+	select BR2_PACKAGE_VULKAN_LOADER
+	select BR2_PACKAGE_MESA3D_VULKAN_DRIVER_POWERVR
+	help
+	  Zink is a Gallium driver that emits Vulkan API calls,
+	  providing OpenGL support on devices that only support
+	  Vulkan.
+
 config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_PVR
         bool "Gallium pvr driver"
         depends on BR2_PACKAGE_IMG_GPU_POWERVR
@@ -306,6 +318,16 @@ comment "Gallium VDPAU state tracker needs X.org and gallium drivers r300, r600,
 		|| BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_RADEONSI)
 
 comment "Vulkan drivers"
+
+config BR2_PACKAGE_MESA3D_VULKAN_DRIVER_POWERVR
+        bool "Vulkan imagination pvr driver"
+        depends on BR2_PACKAGE_IMG_GPU_POWERVR
+        depends on (BR2_arm || BR2_aarch64 || BR2_RISCV_64)
+        depends on BR2_TOOLCHAIN_HAS_SYNC_4 || !BR2_PACKAGE_XORG7 # libxshmfence
+	select BR2_PACKAGE_MESA3D_DRI3 if BR2_PACKAGE_XORG7
+        select BR2_PACKAGE_MESA3D_VULKAN_DRIVER
+        help
+          Vulkan imagination pvr driver.
 
 config BR2_PACKAGE_MESA3D_VULKAN_DRIVER_INTEL
 	bool "Vulkan Intel driver"
