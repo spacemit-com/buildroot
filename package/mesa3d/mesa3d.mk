@@ -26,8 +26,14 @@ MESA3D_DEPENDENCIES = \
 	zlib
 
 MESA3D_CONF_OPTS = \
+	-Ddri-drivers-path=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
+	-Ddri-search-path='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
 	-Dgallium-omx=disabled \
-	-Dpower8=disabled
+	-Dpower8=disabled \
+	-Dgallium-extra-hud=false \
+	-Dgallium-vdpau=disabled \
+	-Dgallium-pvr-alias=spacemit \
+	-Db_ndebug=true
 
 # Codesourcery ARM 2014.05 fail to link libmesa_dri_drivers.so with --as-needed linker
 # flag due to a linker bug between binutils 2.24 and 2.25 (2.24.51.20140217).
@@ -166,11 +172,22 @@ MESA3D_CONF_OPTS += -Dgallium-va=disabled
 # libGL is only provided for a full xorg stack, without libglvnd
 ifeq ($(BR2_PACKAGE_MESA3D_OPENGL_GLX),y)
 MESA3D_PROVIDES += $(if $(BR2_PACKAGE_LIBGLVND),,libgl)
+MESA3D_CONF_OPTS += \
+	-Dglx=dri \
+	-Dglx-direct=true \
+	-Dshared-glapi=enabled
+ifeq ($(BR2_PACKAGE_MESA3D_NEEDS_XA),y)
+MESA3D_CONF_OPTS += -Dgallium-xa=enabled
+else
+MESA3D_CONF_OPTS += -Dgallium-xa=disabled
+endif
 else
 define MESA3D_REMOVE_OPENGL_HEADERS
 	rm -rf $(STAGING_DIR)/usr/include/GL/
 endef
-
+MESA3D_CONF_OPTS += \
+	-Dglx=disabled \
+	-Dgallium-xa=disabled
 MESA3D_POST_INSTALL_STAGING_HOOKS += MESA3D_REMOVE_OPENGL_HEADERS
 endif
 
@@ -185,6 +202,17 @@ MESA3D_DEPENDENCIES += \
 	xorgproto \
 	libxcb
 MESA3D_PLATFORMS += x11
+
+# DRI3 support
+ifeq ($(BR2_PACKAGE_MESA3D_DRI3),y)
+MESA3D_CONF_OPTS += -Ddri3=enabled
+ifeq ($(BR2_PACKAGE_XLIB_LIBXSHMFENCE),y)
+MESA3D_DEPENDENCIES += xlib_libxshmfence
+endif
+else
+MESA3D_CONF_OPTS += -Ddri3=disabled
+endif
+
 endif
 ifeq ($(BR2_PACKAGE_WAYLAND),y)
 MESA3D_DEPENDENCIES += wayland wayland-protocols
