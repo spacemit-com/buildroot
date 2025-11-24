@@ -1,0 +1,34 @@
+From ea68fac0d4d868e5e7e262597811da757b826d19 Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Mon, 21 Apr 2025 15:09:20 +0800
+Subject: [PATCH 11/14] stcodecdec: support decoding output after inputting a
+ frame of data
+
+---
+ libavcodec/stcodecdec.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/libavcodec/stcodecdec.c b/libavcodec/stcodecdec.c
+index e13d7a0d..3025b298 100755
+--- a/libavcodec/stcodecdec.c
++++ b/libavcodec/stcodecdec.c
+@@ -543,7 +543,7 @@ static int stcodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
+         av_log(avctx, AV_LOG_DEBUG,
+                "Failed to ff_decode_get_packet (ret = %d (%s)).\n", ret,
+                av_err2str(ret));
+-        goto fail;
++        goto request_output_frame;
+       }
+ 
+       ret = stcodec_send_packet(avctx, &pkt);
+@@ -558,6 +558,7 @@ static int stcodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
+     }
+   }
+ 
++request_output_frame:
+   do {
+     ret = VDEC_RequestOutputFrame(decoder->mpp_vdec_ctx,
+                                   FRAME_GetBaseData(mppframe));
+-- 
+2.34.1
+

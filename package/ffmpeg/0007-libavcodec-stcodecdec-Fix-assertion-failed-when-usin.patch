@@ -1,0 +1,49 @@
+From bbf2998ffee1b5dc85bee8fd0f8ac63413dc877d Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Mon, 13 Jan 2025 17:43:31 +0800
+Subject: [PATCH 07/14] libavcodec:stcodecdec: Fix assertion failed when using
+ avfilter
+
+cmd:
+ffmpeg  -codec:v hevc_stcodec -i target-265.mp4 -codec:v h264_stcodec -vf "drawtext=text='Watermark':fontcolor=white:fontsize=24:x=10:y=10" output.mp4
+
+log:
+Assertion desc->nb_objects <= AV_DRM_MAX_PLANES failed at src/libavutil/hwcontext_drm.c:150
+---
+ libavcodec/stcodecdec.c | 13 ++++++-------
+ 1 file changed, 6 insertions(+), 7 deletions(-)
+
+diff --git a/libavcodec/stcodecdec.c b/libavcodec/stcodecdec.c
+index 1c846ae6..05c6850d 100755
+--- a/libavcodec/stcodecdec.c
++++ b/libavcodec/stcodecdec.c
+@@ -709,6 +709,12 @@ static int stcodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
+         frame->buf[0] = av_buffer_create((uint8_t*)desc, sizeof(*desc),
+                                          stcodec_release_frame, framecontextref,
+                                          AV_BUFFER_FLAG_READONLY);
++        frame->hw_frames_ctx = av_buffer_ref(decoder->frames_ref);
++        if (!frame->hw_frames_ctx) {
++          av_log(avctx, AV_LOG_ERROR, "Failed to create hw_frames_ctx.\n");
++          ret = AVERROR(ENOMEM);
++          goto fail;
++        }
+       } else if (avctx->pix_fmt == AV_PIX_FMT_NV12 ||
+                  avctx->pix_fmt == AV_PIX_FMT_NV21) {
+         frame->linesize[0] = get_stride(avctx->width, STRIDE_ALIGN);
+@@ -737,13 +743,6 @@ static int stcodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
+         ret = AVERROR(ENOMEM);
+         goto fail;
+       }
+-
+-      frame->hw_frames_ctx = av_buffer_ref(decoder->frames_ref);
+-      if (!frame->hw_frames_ctx) {
+-        av_log(avctx, AV_LOG_ERROR, "Failed to create hw_frames_ctx.\n");
+-        ret = AVERROR(ENOMEM);
+-        goto fail;
+-      }
+     } else if (decoder->flushed < DROPFRAME_NUM_AFTER_FLUSH) {
+       VDEC_ReturnOutputFrame(decoder->mpp_vdec_ctx,
+                              FRAME_GetBaseData(mppframe));
+-- 
+2.34.1
+

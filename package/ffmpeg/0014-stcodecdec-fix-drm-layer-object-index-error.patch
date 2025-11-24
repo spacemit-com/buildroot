@@ -1,0 +1,27 @@
+From 570f3d39bef66b6135a71824c7f6a5fec7963c3e Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Tue, 10 Jun 2025 10:10:36 +0800
+Subject: [PATCH 14/14] stcodecdec: fix drm layer object index error
+
+---
+ libavcodec/stcodecdec.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/libavcodec/stcodecdec.c b/libavcodec/stcodecdec.c
+index 8e73e784..f9a92b7e 100755
+--- a/libavcodec/stcodecdec.c
++++ b/libavcodec/stcodecdec.c
+@@ -730,8 +730,8 @@ request_output_frame:
+         }
+ 
+         layer->planes[0].object_index = 0;
+-        layer->planes[1].object_index = 1;
+-        layer->planes[2].object_index = 2;
++        layer->planes[1].object_index = 0;
++        layer->planes[2].object_index = 0;
+         if (layer->format == DRM_FORMAT_NV12
+             || layer->format == DRM_FORMAT_NV21) {
+           layer->planes[0].offset = 0;
+-- 
+2.34.1
+

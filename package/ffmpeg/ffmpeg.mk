@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-FFMPEG_VERSION = 6.1.3
+FFMPEG_VERSION = 7.1.1
 FFMPEG_SOURCE = ffmpeg-$(FFMPEG_VERSION).tar.xz
 FFMPEG_SITE = https://ffmpeg.org/releases
 FFMPEG_INSTALL_STAGING = YES
@@ -32,7 +32,6 @@ FFMPEG_CONF_OPTS = \
 	--disable-gray \
 	--enable-swscale-alpha \
 	--disable-small \
-	--disable-crystalhd \
 	--disable-dxva2 \
 	--enable-runtime-cpudetect \
 	--disable-hardcoded-tables \
@@ -40,6 +39,7 @@ FFMPEG_CONF_OPTS = \
 	--disable-mipsdspr2 \
 	--disable-msa \
 	--enable-hwaccels \
+	--enable-sdl2 \
 	--disable-cuda \
 	--disable-cuvid \
 	--disable-nvenc \
@@ -55,6 +55,10 @@ FFMPEG_CONF_OPTS = \
 	--disable-doc
 
 FFMPEG_DEPENDENCIES += host-pkgconf
+
+FFMPEG_DEPENDENCIES += mpp
+FFMPEG_CONF_OPTS += --extra-libs=-lspacemit_mpp \
+                        --enable-stcodec
 
 ifeq ($(BR2_PACKAGE_FFMPEG_GPL),y)
 FFMPEG_CONF_OPTS += --enable-gpl

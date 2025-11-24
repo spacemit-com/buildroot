@@ -1,0 +1,37 @@
+From 3bd34662066cda1e299e36a0cabd95c351e36062 Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Mon, 21 Apr 2025 15:10:18 +0800
+Subject: [PATCH 08/14] stcodecdec: adjust some log level
+
+---
+ libavcodec/stcodecdec.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/libavcodec/stcodecdec.c b/libavcodec/stcodecdec.c
+index 05c6850d..ce67856f 100755
+--- a/libavcodec/stcodecdec.c
++++ b/libavcodec/stcodecdec.c
+@@ -562,7 +562,7 @@ static int stcodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
+                                   FRAME_GetBaseData(mppframe));
+ 
+     if (ret == MPP_CODER_NULL_DATA) {
+-      av_log(avctx, AV_LOG_ERROR, "Null data, return.\n");
++      av_log(avctx, AV_LOG_DEBUG, "Null data, return.\n");
+       VDEC_ReturnOutputFrame(decoder->mpp_vdec_ctx,
+                              FRAME_GetBaseData(mppframe));
+     }
+@@ -573,9 +573,9 @@ static int stcodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
+         continue;
+       }
+ 
+-      av_log(avctx, AV_LOG_ERROR, "NO data, return.\n");
++      av_log(avctx, AV_LOG_DEBUG, "NO data, return.\n");
+       if (avctx->pix_fmt != AV_PIX_FMT_DRM_PRIME) {
+-        av_log(avctx, AV_LOG_ERROR,
++        av_log(avctx, AV_LOG_DEBUG,
+                "FFmpeg conversion need sleep 20 ms, pixfmt(%d).\n",
+                avctx->pix_fmt);
+         usleep(20000);
+-- 
+2.34.1
+

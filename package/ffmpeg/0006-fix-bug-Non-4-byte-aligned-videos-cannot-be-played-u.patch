@@ -1,0 +1,59 @@
+From 888a72f2b00974df20e33dc26b6b8c66a05e098b Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Mon, 18 Nov 2024 10:33:42 +0800
+Subject: [PATCH 06/14] fix bug: Non-4-byte aligned videos cannot be played
+ using mpv
+
+---
+ libavcodec/stcodecdec.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/libavcodec/stcodecdec.c b/libavcodec/stcodecdec.c
+index 09f9c49b..1c846ae6 100755
+--- a/libavcodec/stcodecdec.c
++++ b/libavcodec/stcodecdec.c
+@@ -44,7 +44,7 @@
+ #define MAX_SUPPORT_HEIGHT (4096)
+ #define MIN_SUPPORT_WIDTH (640)
+ #define MIN_SUPPORT_HEIGHT (320)
+-#define STRIDE_ALIGN (8)
++#define STRIDE_ALIGN (4)
+ 
+ typedef struct {
+   MppVdecCtx* mpp_vdec_ctx;
+@@ -347,6 +347,7 @@ static int stcodec_init_decoder(AVCodecContext* avctx) {
+   decoder->mpp_vdec_ctx->stVdecPara.nHeight = avctx->height;
+   decoder->mpp_vdec_ctx->stVdecPara.nStride =
+       get_stride(avctx->width, STRIDE_ALIGN);
++  decoder->mpp_vdec_ctx->stVdecPara.nAlign = STRIDE_ALIGN;
+   decoder->mpp_vdec_ctx->stVdecPara.eOutputPixelFormat =
+       stcodec_get_pixelformat(avctx);
+   if (avctx->pix_fmt == AV_PIX_FMT_DRM_PRIME) {
+@@ -687,7 +688,8 @@ static int stcodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
+ 
+         desc->nb_objects = 1;
+         desc->objects[0].fd = FRAME_GetFD(mppframe, 0);
+-        desc->objects[0].size = frame->width * frame->height * 3 / 2;
++        desc->objects[0].size = get_stride(frame->width, STRIDE_ALIGN) *
++                                frame->height * 3 / 2;
+         av_log(avctx, AV_LOG_DEBUG, "fd=%d size=%ld\n", desc->objects[0].fd,
+                desc->objects[0].size);
+         desc->nb_layers = 1;
+@@ -697,11 +699,11 @@ static int stcodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
+ 
+         layer->planes[0].object_index = 0;
+         layer->planes[0].offset = 0;
+-        layer->planes[0].pitch = frame->width;
++        layer->planes[0].pitch = get_stride(frame->width, STRIDE_ALIGN);
+ 
+         layer->planes[1].object_index = 0;
+-        layer->planes[1].offset = frame->width * frame->height;
+-        layer->planes[1].pitch = frame->width;
++        layer->planes[1].offset = layer->planes[0].pitch * frame->height;
++        layer->planes[1].pitch = get_stride(frame->width, STRIDE_ALIGN);
+ 
+         frame->data[0] = (uint8_t*)desc;
+         frame->buf[0] = av_buffer_create((uint8_t*)desc, sizeof(*desc),
+-- 
+2.34.1
+

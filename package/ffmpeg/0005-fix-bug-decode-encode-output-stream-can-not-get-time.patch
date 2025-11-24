@@ -1,0 +1,33 @@
+From 507cb1ba8507e6804a795dddd947b1bde0a3eb15 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E8=92=99=E7=82=B3=E6=B1=89?= <binghan.meng@spacemit.com>
+Date: Fri, 15 Nov 2024 09:57:49 +0800
+Subject: [PATCH 05/14] fix bug: decode->encode, output stream can not get
+ timestamp
+
+---
+ libavcodec/stcodecenc.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/libavcodec/stcodecenc.c b/libavcodec/stcodecenc.c
+index 83d4af45..e0839aba 100755
+--- a/libavcodec/stcodecenc.c
++++ b/libavcodec/stcodecenc.c
+@@ -167,6 +167,7 @@ static int stcodec_receive_packet(AVCodecContext* avctx, AVPacket* avpkt) {
+     }
+ 
+     FRAME_SetID(encoder->mpp_frame, encoder->id);
++    FRAME_SetPts(encoder->mpp_frame, frame->pts);
+     encoder->id++;
+     if (encoder->id == 12) encoder->id = 0;
+     ret = VENC_SendInputFrame(encoder->mpp_venc_ctx,
+@@ -177,6 +178,7 @@ static int stcodec_receive_packet(AVCodecContext* avctx, AVPacket* avpkt) {
+       if (ret == MPP_OK) {
+         av_new_packet(avpkt, PACKET_SIZE);
+         avpkt->size = PACKET_GetLength(encoder->mpp_packet);
++        avpkt->pts = PACKET_GetPts(encoder->mpp_packet);
+         memcpy(avpkt->data, PACKET_GetDataPointer(encoder->mpp_packet),
+                avpkt->size);
+       }
+-- 
+2.34.1
+

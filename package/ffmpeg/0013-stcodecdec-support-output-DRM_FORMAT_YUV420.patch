@@ -1,0 +1,128 @@
+From 8028e484764d91858afddde4eafbfb66a1c0f099 Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Mon, 9 Jun 2025 20:14:57 +0800
+Subject: [PATCH 13/14] stcodecdec: support output DRM_FORMAT_YUV420
+
+---
+ libavcodec/stcodecdec.c | 80 ++++++++++++++++++++++++++++++++---------
+ 1 file changed, 64 insertions(+), 16 deletions(-)
+
+diff --git a/libavcodec/stcodecdec.c b/libavcodec/stcodecdec.c
+index 45057e11..8e73e784 100755
+--- a/libavcodec/stcodecdec.c
++++ b/libavcodec/stcodecdec.c
+@@ -104,7 +104,17 @@ static MppPixelFormat stcodec_get_pixelformat(AVCodecContext* avctx) {
+     case AV_PIX_FMT_YUV420P:
+       return PIXEL_FORMAT_I420;
+     case AV_PIX_FMT_DRM_PRIME:
+-      return PIXEL_FORMAT_NV12;
++      av_log(avctx, AV_LOG_DEBUG, "sw_pix_fmt %d.\n", avctx->sw_pix_fmt);
++      switch (avctx->sw_pix_fmt) {
++        case AV_PIX_FMT_NV12:
++          return PIXEL_FORMAT_NV12;
++        case AV_PIX_FMT_NV21:
++          return PIXEL_FORMAT_NV21;
++        case AV_PIX_FMT_YUV420P:
++          return PIXEL_FORMAT_I420;
++        default:
++          return PIXEL_FORMAT_NV12;
++      }
+     default:
+       av_log(avctx, AV_LOG_ERROR, "MPP do not support this pixel format.\n");
+       return PIXEL_FORMAT_UNKNOWN;
+@@ -636,7 +646,10 @@ request_output_frame:
+ 
+     hwframes = (AVHWFramesContext*)decoder->frames_ref->data;
+     hwframes->format = AV_PIX_FMT_DRM_PRIME;
+-    hwframes->sw_format = AV_PIX_FMT_NV12;
++    if (avctx->sw_pix_fmt == AV_PIX_FMT_NONE)
++      hwframes->sw_format = AV_PIX_FMT_NV12;
++    else
++      hwframes->sw_format = avctx->sw_pix_fmt;
+     hwframes->width = avctx->width;
+     hwframes->height = avctx->height;
+     ret = av_hwframe_ctx_init(decoder->frames_ref);
+@@ -694,22 +707,55 @@ request_output_frame:
+ 
+         desc->nb_objects = 1;
+         desc->objects[0].fd = FRAME_GetFD(mppframe, 0);
+-        desc->objects[0].size = get_stride(frame->width, STRIDE_ALIGN) *
+-                                frame->height * 3 / 2;
+-        av_log(avctx, AV_LOG_DEBUG, "fd=%d size=%ld\n", desc->objects[0].fd,
+-               desc->objects[0].size);
++
+         desc->nb_layers = 1;
+         layer = &desc->layers[0];
+-        layer->format = DRM_FORMAT_NV12;
+-        layer->nb_planes = 2;
++        switch (avctx->sw_pix_fmt) {
++          case AV_PIX_FMT_NV12:
++            layer->format = DRM_FORMAT_NV12;
++            layer->nb_planes = 2;
++            break;
++          case AV_PIX_FMT_NV21:
++            layer->format = DRM_FORMAT_NV21;
++            layer->nb_planes = 2;
++            break;
++          case AV_PIX_FMT_YUV420P:
++            layer->format = DRM_FORMAT_YUV420;
++            layer->nb_planes = 3;
++            break;
++          default:
++            layer->format = DRM_FORMAT_NV12;
++            layer->nb_planes = 2;
++            break;
++        }
+ 
+         layer->planes[0].object_index = 0;
+-        layer->planes[0].offset = 0;
+-        layer->planes[0].pitch = get_stride(frame->width, STRIDE_ALIGN);
+-
+-        layer->planes[1].object_index = 0;
+-        layer->planes[1].offset = layer->planes[0].pitch * frame->height;
+-        layer->planes[1].pitch = get_stride(frame->width, STRIDE_ALIGN);
++        layer->planes[1].object_index = 1;
++        layer->planes[2].object_index = 2;
++        if (layer->format == DRM_FORMAT_NV12
++            || layer->format == DRM_FORMAT_NV21) {
++          layer->planes[0].offset = 0;
++          layer->planes[0].pitch = get_stride(frame->width, STRIDE_ALIGN);
++          layer->planes[1].offset = layer->planes[0].pitch * frame->height;
++          layer->planes[1].pitch = get_stride(frame->width, STRIDE_ALIGN);
++          desc->objects[0].size = layer->planes[0].pitch * frame->height +
++              layer->planes[1].pitch * frame->height / 2;
++        } else if (layer->format == DRM_FORMAT_YUV420) {
++            layer->planes[0].offset = 0;
++            layer->planes[0].pitch = get_stride(frame->width, STRIDE_ALIGN);
++            layer->planes[1].offset = layer->planes[0].pitch * frame->height;
++            layer->planes[1].pitch = get_stride(((frame->width * 4 + 7) >> 3),
++                STRIDE_ALIGN);
++            layer->planes[2].offset = layer->planes[1].offset +
++                layer->planes[1].pitch * frame->height / 2;
++            layer->planes[2].pitch = get_stride(((frame->width * 4 + 7) >> 3),
++                STRIDE_ALIGN);
++            desc->objects[0].size = layer->planes[0].pitch * frame->height +
++                layer->planes[1].pitch * frame->height / 2 +
++                layer->planes[2].pitch * frame->height / 2;
++        }
++        av_log(avctx, AV_LOG_DEBUG, "fd=%d size=%ld\n", desc->objects[0].fd,
++               desc->objects[0].size);
+ 
+         frame->data[0] = (uint8_t*)desc;
+         frame->buf[0] = av_buffer_create((uint8_t*)desc, sizeof(*desc),
+@@ -732,8 +778,10 @@ request_output_frame:
+             stcodec_release_frame, framecontextref, AV_BUFFER_FLAG_READONLY);
+       } else if (avctx->pix_fmt == AV_PIX_FMT_YUV420P) {
+         frame->linesize[0] = get_stride(avctx->width, STRIDE_ALIGN);
+-        frame->linesize[1] = get_stride(avctx->width, STRIDE_ALIGN) / 2;
+-        frame->linesize[2] = get_stride(avctx->width, STRIDE_ALIGN) / 2;
++        frame->linesize[1] = get_stride(((frame->width * 4 + 7) >> 3),
++            STRIDE_ALIGN);
++        frame->linesize[2] = get_stride(((frame->width * 4 + 7) >> 3),
++            STRIDE_ALIGN);
+         frame->data[0] = FRAME_GetDataPointer(mppframe, 0);
+         frame->data[1] = FRAME_GetDataPointer(mppframe, 1);
+         frame->data[2] = FRAME_GetDataPointer(mppframe, 2);
+-- 
+2.34.1
+

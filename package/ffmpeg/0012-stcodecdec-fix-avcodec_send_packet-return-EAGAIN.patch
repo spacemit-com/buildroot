@@ -1,0 +1,39 @@
+From 9a0258b231f6fd1945eb3c1c8c3bfcf8fabd7074 Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Mon, 9 Jun 2025 16:37:28 +0800
+Subject: [PATCH 12/14] stcodecdec: fix avcodec_send_packet return EAGAIN
+
+log:
+[vist#0:0/h264 @ 0x2ab64b5540] [dec:h264_stcodec @ 0x2ab64b6a30] A decoder returned an unexpected error code. This is a bug, please report it.
+[vist#0:0/h264 @ 0x2ab64b5540] [dec:h264_stcodec @ 0x2ab64b6a30] Error processing packet in decoder: Internal bug, should not have happened
+[vist#0:0/h264 @ 0x2ab64b5540] [dec:h264_stcodec @ 0x2ab64b6a30] Task finished with error code: -558323010 (Internal bug, should not have happened)
+[vist#0:0/h264 @ 0x2ab64b5540] [dec:h264_stcodec @ 0x2ab64b6a30] Terminating thread with return code -558323010 (Internal bug, should not have happened)
+---
+ libavcodec/stcodecdec.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/libavcodec/stcodecdec.c b/libavcodec/stcodecdec.c
+index 3025b298..45057e11 100755
+--- a/libavcodec/stcodecdec.c
++++ b/libavcodec/stcodecdec.c
+@@ -577,10 +577,14 @@ request_output_frame:
+ 
+       av_log(avctx, AV_LOG_DEBUG, "NO data, return.\n");
+       if (avctx->pix_fmt != AV_PIX_FMT_DRM_PRIME) {
+-        av_log(avctx, AV_LOG_DEBUG,
+-               "FFmpeg conversion need sleep 20 ms, pixfmt(%d).\n",
++        if (freeslots <= 0) {
++          av_log(avctx, AV_LOG_DEBUG, "Slots is full, frame must be receive\n");
++          av_log(avctx, AV_LOG_DEBUG,
++               "FFmpeg conversion need sleep 5 ms, pixfmt(%d).\n",
+                avctx->pix_fmt);
+-        usleep(20000);
++          usleep(5000);
++          continue;
++	}
+       }
+       ret = AVERROR(EAGAIN);
+       goto fail;
+-- 
+2.34.1
+

@@ -1,0 +1,46 @@
+From e3a1e812c9ec8564b37b4b44af06af7faca79328 Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Wed, 4 Jun 2025 14:24:37 +0800
+Subject: [PATCH 10/14] fix compile error
+
+---
+ libavcodec/stcodecdec.c | 3 ++-
+ libavcodec/stcodecenc.c | 1 +
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/libavcodec/stcodecdec.c b/libavcodec/stcodecdec.c
+index ce67856f..e13d7a0d 100755
+--- a/libavcodec/stcodecdec.c
++++ b/libavcodec/stcodecdec.c
+@@ -28,7 +28,7 @@
+ #include "codec_internal.h"
+ #include "decode.h"
+ #include "h264_parse.h"
+-#include "hevc_parse.h"
++#include "hevc/parse.h"
+ #include "hwconfig.h"
+ #include "libavutil/buffer.h"
+ #include "libavutil/common.h"
+@@ -37,6 +37,7 @@
+ #include "libavutil/hwcontext_drm.h"
+ #include "libavutil/log.h"
+ #include "libavutil/opt.h"
++#include "libavutil/mem.h"
+ #include "vdec.h"
+ 
+ #define DROPFRAME_NUM_AFTER_FLUSH (10)
+diff --git a/libavcodec/stcodecenc.c b/libavcodec/stcodecenc.c
+index e0839aba..26c0ba79 100755
+--- a/libavcodec/stcodecenc.c
++++ b/libavcodec/stcodecenc.c
+@@ -43,6 +43,7 @@
+ #include "libavutil/hwcontext_drm.h"
+ #include "libavutil/log.h"
+ #include "libavutil/opt.h"
++#include "libavutil/mem.h"
+ #include "venc.h"
+ 
+ #define PACKET_SIZE (2 * 1024 * 1024)
+-- 
+2.34.1
+
