@@ -1,0 +1,8 @@
+config BR2_PACKAGE_HOST_PYTHON_GLSLANG
+	bool "host python-glslang"
+	depends on BR2_PACKAGE_HOST_PYTHON3
+        help
+          This package provides the official Python bindings for the
+          glslang library.
+
+          https://github.com/KhronosGroup/glslang
