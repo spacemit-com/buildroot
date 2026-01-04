@@ -4375,7 +4375,6 @@ comment "Legacy options removed in 2017.11"
 
 config BR2_PACKAGE_RFKILL
 	bool "rfkill package removed"
-	select BR2_LEGACY
 	select BR2_PACKAGE_UTIL_LINUX
 	select BR2_PACKAGE_UTIL_LINUX_RFKILL
 	help
