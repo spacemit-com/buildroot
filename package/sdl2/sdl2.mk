@@ -23,11 +23,9 @@ SDL2_CONF_OPTS += \
 	--disable-video-vivante \
 	--disable-video-cocoa \
 	--disable-video-metal \
-	--disable-video-wayland \
 	--disable-video-dummy \
 	--disable-video-offscreen \
 	--disable-video-vulkan \
-	--disable-video-directfb \
 	--disable-ime \
 	--disable-ibus \
 	--disable-fcitx \
@@ -163,5 +161,8 @@ SDL2_CONF_OPTS += --enable-video-kmsdrm
 else
 SDL2_CONF_OPTS += --disable-video-kmsdrm
 endif
+
+SDL2_DEPENDENCIES += wayland libxkbcommon
+SDL2_CONF_OPTS += --enable-video-wayland
 
 $(eval $(autotools-package))
