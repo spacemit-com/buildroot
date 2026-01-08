@@ -1,0 +1,106 @@
+From 6063409c9c1877cadfb7c16ee769b868c2a5be32 Mon Sep 17 00:00:00 2001
+From: lizhirong <zhirong.li@spacemit.com>
+Date: Mon, 8 Jul 2024 19:29:25 +0800
+Subject: [PATCH] support glupload to use dma for spacemit
+
+---
+ gst-libs/gst/gl/gstglupload.c | 78 +++++++++++++++++++++++++++++++++++
+ 1 file changed, 78 insertions(+)
+
+diff --git a/gst-libs/gst/gl/gstglupload.c b/gst-libs/gst/gl/gstglupload.c
+index eb67e9c..5a2a491 100644
+--- a/gst-libs/gst/gl/gstglupload.c
++++ b/gst-libs/gst/gl/gstglupload.c
+@@ -2932,11 +2932,89 @@ static const UploadMethod _nvmm_upload = {
+ 
+ #endif /* HAVE_NVMM */
+ 
++static GstStaticCaps _spacemit_upload_caps =
++    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE_WITH_FEATURES
++    (GST_CAPS_FEATURE_MEMORY_DMABUF,
++        GST_GL_MEMORY_VIDEO_FORMATS_STR) ";"
++    GST_VIDEO_CAPS_MAKE (GST_GL_MEMORY_VIDEO_FORMATS_STR));
++
++static GstCaps *
++_spacemit_upload_transform_caps (gpointer impl, GstGLContext * context,
++    GstPadDirection direction, GstCaps * caps)
++{
++  struct DmabufUpload *dmabuf = impl;
++  GstCapsFeatures *passthrough;
++  GstCaps *ret;
++
++  if (context) {
++    const GstGLFuncs *gl = context->gl_vtable;
++
++    if (!gl->EGLImageTargetTexture2D)
++      return NULL;
++
++    /* Don't propose DMABuf caps feature unless it can be supported */
++    if (gst_gl_context_get_gl_platform (context) != GST_GL_PLATFORM_EGL)
++      return NULL;
++
++    if (!gst_gl_context_check_feature (context, "EGL_KHR_image_base"))
++      return NULL;
++  }
++
++  passthrough = gst_caps_features_from_string
++      (GST_CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION);
++
++  if (direction == GST_PAD_SINK) {
++    GstCaps *tmp;
++
++    ret =
++        _set_caps_features_with_passthrough (caps,
++        GST_CAPS_FEATURE_MEMORY_GL_MEMORY, passthrough);
++
++    tmp = _caps_intersect_texture_target (ret, 1 << GST_GL_TEXTURE_TARGET_2D);
++    gst_caps_unref (ret);
++    ret = tmp;
++  } else {
++    gint i, n;
++
++    ret =
++        _set_caps_features_with_passthrough (caps,
++        GST_CAPS_FEATURE_MEMORY_DMABUF, passthrough);
++
++    n = gst_caps_get_size (ret);
++    for (i = 0; i < n; i++) {
++      GstStructure *s = gst_caps_get_structure (ret, i);
++
++      gst_structure_remove_fields (s, "texture-target", NULL);
++    }
++  }
++
++  gst_caps_features_free (passthrough);
++
++  GST_DEBUG_OBJECT (dmabuf->upload, "transformed %" GST_PTR_FORMAT " into %"
++      GST_PTR_FORMAT, caps, ret);
++
++  return ret;
++}
++
++static const UploadMethod _spacemit_upload = {
++  "Spacemit",
++  0,
++  &_spacemit_upload_caps,
++  &_dma_buf_upload_new,
++  &_spacemit_upload_transform_caps,
++  &_dma_buf_upload_accept,
++  &_dma_buf_upload_propose_allocation,
++  &_dma_buf_upload_perform,
++  &_dma_buf_upload_free
++};
++
++
+ static const UploadMethod *upload_methods[] = {
+   &_passthrough_upload,
+   &_gl_memory_upload,
+ #if GST_GL_HAVE_DMABUF
+   &_direct_dma_buf_upload,
++  &_spacemit_upload,
+   &_direct_dma_buf_external_upload,
+   &_dma_buf_upload,
+ #endif
+-- 
+2.34.1
+

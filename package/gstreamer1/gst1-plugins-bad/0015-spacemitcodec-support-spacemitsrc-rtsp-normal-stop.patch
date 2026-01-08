@@ -1,0 +1,146 @@
+From cd1003245a1ef6fe7c932df86623959ee715690e Mon Sep 17 00:00:00 2001
+From: wumingjie <mingjie.wu@spacemit.com>
+Date: Wed, 10 Dec 2025 17:53:26 +0800
+Subject: [PATCH] spacemitcodec: support spacemitsrc -> rtsp normal stop
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitdec.c | 11 +++++--
+ ext/spacemit/spacemitcodec/gstspacemitenc.c | 33 ++++++++++++++-------
+ ext/spacemit/spacemitcodec/gstspacemitenc.h |  2 +-
+ 3 files changed, 32 insertions(+), 14 deletions(-)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitdec.c b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+index 7b62c10..ba482c5 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitdec.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+@@ -77,12 +77,12 @@ GST_STATIC_PAD_TEMPLATE ("sink",
+     "video/x-h264, "
+     "stream-format=(string)byte-stream, alignment=(string)au, "
+     "profile=(string){ constrained-baseline, baseline, main, high },"
+-    "width=(int) [640,MAX], " "height=(int) [480,MAX]"
++    "width=(int) [320,MAX], " "height=(int) [240,MAX]"
+     ";"
+     "video/x-h265,"
+     "stream-format = (string) byte-stream,"
+     "alignment = (string)au,"
+-    "width=(int) [640,MAX], " "height=(int) [480,MAX]"
++    "width=(int) [320,MAX], " "height=(int) [240,MAX]"
+     ";"
+     "video/mpeg,"
+     "mpegversion = (int) { 1, 2, 4 },"
+@@ -858,7 +858,14 @@ gst_spacemitdec_loop (GstVideoDecoder * decoder)
+   req_ret = gst_spacemitdec_request_frame (thiz);
+   if (req_ret == GST_FLOW_EOS || req_ret == GST_FLOW_NOT_NEGOTIATED || \
+       req_ret == GST_FLOW_ERROR || req_ret == MPP_CODER_NULL_DATA) {
++    if (req_ret == MPP_CODER_NULL_DATA) {
++      frame = gst_video_decoder_get_oldest_frame (decoder);
++      if (frame)
++        gst_video_decoder_release_frame (decoder, frame);
++      GST_DEBUG_OBJECT (thiz, "req_ret: %d", req_ret);
++    }
+     flow_status = (req_ret == MPP_CODER_NULL_DATA) ? GST_FLOW_OK : req_ret;
++
+     goto done;
+   }
+ 
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitenc.c b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+index 4c9fdd1..de44765 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitenc.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+@@ -466,10 +466,10 @@ gst_spacemitenc_start (GstVideoEncoder * encoder)
+   g_cond_init (&thiz->event_cond);
+ 
+   thiz->bufs_hash = g_hash_table_new (g_direct_hash, g_direct_equal);
+-  thiz->pending_frames = 0;
++  g_atomic_int_set(&thiz->pending_frames, 0);
++  // thiz->pending_frames = 0;
+   thiz->downstream_flow_ret = GST_FLOW_OK;
+   thiz->frame_count = 0;
+-
+   // fbbb = fopen("/home/bianbu/out.yuv", "ab+");
+   // fbbb = fopen("/home/bianbu/out.yuv", "wb");
+ 
+@@ -606,8 +606,15 @@ static gint32 gst_spacemitenc_request_packet (GstSpacemitEnc *thiz, gint *msize,
+     if (ret != MPP_CODER_NO_DATA) {
+       break;
+     } else {
+-      if (count >= 2 && count < MAX_POLL_TIME) {
++      if (count >= 2 && count < 800) {
++        g_usleep(500);
++      } else if (count >= 800 && count < MAX_POLL_TIME) {
+         g_usleep(500);
++        if (g_atomic_int_get(&thiz->pending_frames) <= 0) {
++          GST_WARNING_OBJECT (thiz, "maybe no enc task to do, exit");
++          ret = MPP_POLL_FAILED;
++          goto out;
++        }
+       } else if (count >= MAX_POLL_TIME) {
+         GST_ERROR_OBJECT (thiz, "try max times: %u ms, fail return(%d)", MAX_POLL_TIME / 2, ret);
+         ret = MPP_POLL_FAILED;
+@@ -696,14 +703,14 @@ gst_spacemitenc_loop (GstVideoEncoder * encoder)
+     copy_mpppacket_to_gstbuffer (thiz, frame->output_buffer, msize, mpsize);
+ 
+     lenght += msize + mpsize;
+-    GST_DEBUG_OBJECT (thiz, "loop finish frame %p, ref_count:%d, buf(%p, %p) ref:(%d, %d) (L: %d), pts:%ld",
++    GST_DEBUG_OBJECT (thiz, "loop finish frame %p, ref_count:%d, buf(%p, %p) ref:(%d, %d) (F: %d), pts:%ld",
+       frame, frame->ref_count, frame->input_buffer, frame->output_buffer, GST_MINI_OBJECT_REFCOUNT_VALUE(frame->input_buffer),
+-      GST_MINI_OBJECT_REFCOUNT_VALUE(frame->output_buffer), lenght, msize, PACKET_GetPts(thiz->mpppacket));
++      GST_MINI_OBJECT_REFCOUNT_VALUE(frame->output_buffer), g_atomic_int_get(&thiz->pending_frames), PACKET_GetPts(thiz->mpppacket));
+ 
+     flow_status = gst_video_encoder_finish_frame (encoder, frame);
+   }
+-
+-  thiz->pending_frames--;
++  g_atomic_int_dec_and_test(&thiz->pending_frames);
++  // thiz->pending_frames--;
+ 
+ done:
+   thiz->downstream_flow_ret = flow_status;
+@@ -713,6 +720,9 @@ done:
+     GST_DEBUG_OBJECT (thiz, "Get eos, Finish work and pause task!");
+   } else if (thiz->downstream_flow_ret == GST_FLOW_ERROR) {
+     //pass
++    drain_all_upstream_buffer(thiz);
++    gst_pad_pause_task (GST_VIDEO_ENCODER_SRC_PAD (thiz));
++    GST_ERROR_OBJECT (thiz, "GST_FLOW_ERROR, Finish work and pause task! (%d)", g_atomic_int_get(&thiz->pending_frames));
+   } else if (thiz->downstream_flow_ret != GST_FLOW_OK) {  //other flow
+     GST_WARNING_OBJECT (thiz, "unsupport handle flow status: %d", thiz->downstream_flow_ret);
+   }
+@@ -1120,16 +1130,17 @@ gst_spacemitenc_handle_frame (GstVideoEncoder * encoder,
+   if (flow_ret != GST_FLOW_OK)
+     goto done;
+ 
+-  thiz->pending_frames++;
++  g_atomic_int_inc(&thiz->pending_frames);
++  // thiz->pending_frames++;
+ 
+   flow_ret = thiz->downstream_flow_ret;
+ 
+   if (frame) {
+-    GST_DEBUG_OBJECT (thiz, "finish handle frame:%p, ref_count:%d, finish sum:%d, buf%p, ref: %d",
+-      frame, frame->ref_count, thiz->frame_count, frame->input_buffer, GST_MINI_OBJECT_REFCOUNT_VALUE(frame->input_buffer));
++    GST_DEBUG_OBJECT (thiz, "finish handle frame:%p, ref_count:%d, finish sum:%d, buf%p, ref: %d, F:%d",
++      frame, frame->ref_count, thiz->frame_count, frame->input_buffer, GST_MINI_OBJECT_REFCOUNT_VALUE(frame->input_buffer), g_atomic_int_get(&thiz->pending_frames));
+     goto release_frame;
+   } else {
+-    GST_DEBUG_OBJECT (thiz, "finish handle null frame, eos flow, finish sum:%d", thiz->frame_count);
++    GST_DEBUG_OBJECT (thiz, "finish handle null frame, eos flow, finish sum:%d, %d", thiz->frame_count, g_atomic_int_get(&thiz->pending_frames));
+     goto flow_eos;
+   }
+ 
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitenc.h b/ext/spacemit/spacemitcodec/gstspacemitenc.h
+index 881f6f2..0df560f 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitenc.h
++++ b/ext/spacemit/spacemitcodec/gstspacemitenc.h
+@@ -96,7 +96,7 @@ struct _GstSpacemitEnc
+   GCond event_cond;
+   MppPixelFormat  PixelFormat;
+   GstFlowReturn downstream_flow_ret;
+-  guint pending_frames;
++  gint pending_frames;
+   gboolean at_eos;
+   MppVencCtx *ctx;
+ 	MppVencPara *para;
+-- 
+2.34.1
+

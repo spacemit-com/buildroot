@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-GST1_PLUGINS_BAD_VERSION = 1.24.13
+GST1_PLUGINS_BAD_VERSION = 1.27.2
 GST1_PLUGINS_BAD_SOURCE = gst-plugins-bad-$(GST1_PLUGINS_BAD_VERSION).tar.xz
 GST1_PLUGINS_BAD_SITE = https://gstreamer.freedesktop.org/src/gst-plugins-bad
 GST1_PLUGINS_BAD_INSTALL_STAGING = YES
@@ -65,6 +65,7 @@ GST1_PLUGINS_BAD_CONF_OPTS += \
 	-Dmplex=disabled \
 	-Donnx=disabled \
 	-Dopenexr=disabled \
+	-Dtinyalsa=disabled \
 	-Dopenni2=disabled \
 	-Dteletext=disabled \
 	-Dwildmidi=disabled \
@@ -510,11 +511,6 @@ else
 GST1_PLUGINS_BAD_CONF_OPTS += -Dvmnc=disabled
 endif
 
-ifeq ($(BR2_PACKAGE_GST1_PLUGINS_BAD_PLUGIN_Y4M),y)
-GST1_PLUGINS_BAD_CONF_OPTS += -Dy4m=enabled
-else
-GST1_PLUGINS_BAD_CONF_OPTS += -Dy4m=disabled
-endif
 
 # Plugins with dependencies
 
@@ -824,6 +820,15 @@ GST1_PLUGINS_BAD_CONF_OPTS += -Dzxing=enabled
 GST1_PLUGINS_BAD_DEPENDENCIES += zxing-cpp
 else
 GST1_PLUGINS_BAD_CONF_OPTS += -Dzxing=disabled
+endif
+
+ifeq ($(BR2_PACKAGE_GST1_PLUGINS_BAD_PLUGIN_SPACEMITCODEC),y)
+#$(info  "open spacemit codec")
+GST1_PLUGINS_BAD_CONF_OPTS += -Dspacemitcodec=enabled
+GST1_PLUGINS_BAD_DEPENDENCIES += mpp
+else
+#$(info  "none open spacemit codec")
+GST1_PLUGINS_BAD_CONF_OPTS += -Dspacemitcodec=disabled
 endif
 
 # Add GPL license if GPL licensed plugins enabled.

@@ -1,0 +1,96 @@
+From 5fc2ced842f316bce70b6d826ad1d92abe0d1fb5 Mon Sep 17 00:00:00 2001
+From: wumingjie <mingjie.wu@spacemit.com>
+Date: Wed, 10 Dec 2025 17:49:58 +0800
+Subject: [PATCH] spacemitenc: fix random MppVencPara
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitdec.c |  1 +
+ ext/spacemit/spacemitcodec/gstspacemitenc.c | 23 ++++++++++++++-------
+ 2 files changed, 16 insertions(+), 8 deletions(-)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitdec.c b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+index 62e6c92..7b62c10 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitdec.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+@@ -480,6 +480,7 @@ gst_spacemitdec_init_decoder (GstSpacemitDec * thiz)
+       thiz->ctx->eCodecType == CODEC_V4L2_LINLONV5V7) {
+     thiz->width = thiz->input_state->info.width;
+     thiz->height = thiz->input_state->info.height;
++    memset(&(thiz->ctx->stVdecPara), 0, sizeof(MppVdecPara));
+     thiz->ctx->stVdecPara.eCodingType = thiz->eCodingType;
+     thiz->ctx->stVdecPara.nWidth = thiz->width;
+     thiz->ctx->stVdecPara.nHeight = thiz->height;
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitenc.c b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+index eac2426..22c079b 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitenc.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+@@ -469,7 +469,9 @@ gst_spacemitenc_start (GstVideoEncoder * encoder)
+   thiz->pending_frames = 0;
+   thiz->downstream_flow_ret = GST_FLOW_OK;
+   thiz->frame_count = 0;
+-  // fbbb = fopen("/tmp/out.yuv", "ab+");
++
++  // fbbb = fopen("/home/bianbu/out.yuv", "ab+");
++  // fbbb = fopen("/home/bianbu/out.yuv", "wb");
+ 
+   GST_DEBUG_OBJECT (thiz, "finish start");
+   return TRUE;
+@@ -814,6 +816,7 @@ gst_spacemitenc_init_encoder (GstSpacemitEnc * thiz,
+     width, height, fps_n, fps_d, thiz->eCodingType, thiz->PixelFormat);
+ 
+   thiz->ctx->eCodecType = thiz->eCodecType;
++  memset(&(thiz->ctx->stVencPara), 0, sizeof(MppVencPara));
+   thiz->ctx->stVencPara.eCodingType = thiz->eCodingType;
+   thiz->ctx->stVencPara.nWidth = width;
+   thiz->ctx->stVencPara.nHeight = height;
+@@ -821,6 +824,7 @@ gst_spacemitenc_init_encoder (GstSpacemitEnc * thiz,
+   thiz->ctx->stVencPara.nBitrate = 5000000;
+   thiz->ctx->stVencPara.nFrameRate = fps_n;
+   thiz->ctx->stVencPara.nStride = get_stride(width, 8);
++  thiz->ctx->stVencPara.nAlign = 1;
+ 
+   if (_gst_caps_has_feature (state->caps, GST_CAPS_FEATURE_MEMORY_DMABUF)) {
+     GST_DEBUG_OBJECT (thiz, "upstream element had dmabuf memory caps, is spacemitdec!!");
+@@ -1007,7 +1011,7 @@ static GstFlowReturn gst_spacemitenc_encode_one_frame (GstVideoEncoder * encoder
+   gint32 mppframe_id;
+ 
+   if (frame) {
+-    GST_DEBUG_OBJECT (thiz, "handle frame %p, snb:%u, input buffer pts: %"  GST_TIME_FORMAT ", dts %" GST_TIME_FORMAT,
++    GST_DEBUG_OBJECT (thiz, "handle a frame %p, snb:%u, input buffer pts: %"  GST_TIME_FORMAT ", dts %" GST_TIME_FORMAT,
+         frame, frame->system_frame_number, GST_TIME_ARGS (GST_BUFFER_PTS (frame->input_buffer)),
+         GST_TIME_ARGS (GST_BUFFER_DTS (frame->input_buffer)));
+ 
+@@ -1040,10 +1044,10 @@ static GstFlowReturn gst_spacemitenc_encode_one_frame (GstVideoEncoder * encoder
+         FRAME_SetDataPointer(mppframe, 0, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 0));
+         FRAME_SetDataPointer(mppframe, 1, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 1));
+         FRAME_SetDataPointer(mppframe, 2, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 2));
++
++
++
+       } else {
+-        FRAME_SetDataUsedNum(mppframe, 2);
+-        FRAME_SetDataPointer(mppframe, 0, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 0));
+-        FRAME_SetDataPointer(mppframe, 1, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 1));
+   #if 0
+         //SF_OMX_BUF_INFO *pBufInfo = pOMXBuffer->pOutputPortPrivate;
+         //LOG(SF_LOG_INFO, "%p %d %p\r\n", pOMXBuffer->pBuffer, pOMXBuffer->nFilledLen, pBufInfo->remap_vaddr);
+@@ -1051,10 +1055,13 @@ static GstFlowReturn gst_spacemitenc_encode_one_frame (GstVideoEncoder * encoder
+           gst_video_format_to_string(GST_VIDEO_FRAME_FORMAT(&video_frame)),
+           GST_VIDEO_FRAME_N_PLANES(&video_frame), GST_VIDEO_FRAME_SIZE(&video_frame),
+           GST_VIDEO_FRAME_WIDTH(&video_frame), GST_VIDEO_FRAME_HEIGHT(&video_frame));
+-        fwrite(GST_VIDEO_FRAME_COMP_DATA (&video_frame, 0), 1, 1280*720, fbbb);
+-        fwrite(GST_VIDEO_FRAME_COMP_DATA (&video_frame, 1), 1, 1280*720/2, fbbb);
+-
++        fwrite(GST_VIDEO_FRAME_COMP_DATA (&video_frame, 0), 1, GST_VIDEO_FRAME_WIDTH(&video_frame)*GST_VIDEO_FRAME_HEIGHT(&video_frame), fbbb);
++        fwrite(GST_VIDEO_FRAME_COMP_DATA (&video_frame, 1), 1, GST_VIDEO_FRAME_WIDTH(&video_frame)*GST_VIDEO_FRAME_HEIGHT(&video_frame)/2, fbbb);
++        fsync(fbbb);
+   #endif
++        FRAME_SetDataUsedNum(mppframe, 2);
++        FRAME_SetDataPointer(mppframe, 0, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 0));
++        FRAME_SetDataPointer(mppframe, 1, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 1));
+       }
+       gst_video_frame_unmap (&video_frame);
+ 
+-- 
+2.34.1
+

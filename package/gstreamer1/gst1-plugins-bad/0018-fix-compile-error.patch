@@ -1,0 +1,82 @@
+From 0887c82f5ea097528c4f275349df99f99c9c23d8 Mon Sep 17 00:00:00 2001
+From: wumingjie <mingjie.wu@spacemit.com>
+Date: Wed, 10 Dec 2025 18:55:59 +0800
+Subject: [PATCH] fix compile error
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitdec.c |  7 ++-----
+ ext/spacemit/spacemitcodec/gstspacemitdec.h | 10 ++++++----
+ 2 files changed, 8 insertions(+), 9 deletions(-)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitdec.c b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+index ba482c5..5830ef6 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitdec.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+@@ -347,7 +347,6 @@ MppVdecCtx *gctx = NULL;
+ static gboolean gst_spacemitdec_start (GstVideoDecoder * decoder)
+ {
+ 	GstSpacemitDec *thiz = GST_SPACEMITDEC (decoder);
+-  int ret = 0;
+ 
+   GST_DEBUG_OBJECT (thiz, "in start !");
+ 
+@@ -384,7 +383,6 @@ static gboolean gst_spacemitdec_start (GstVideoDecoder * decoder)
+ static gboolean gst_spacemitdec_stop(GstVideoDecoder * decoder)
+ {
+ 	GstSpacemitDec *thiz = GST_SPACEMITDEC(decoder);
+-  gint32 ret;
+ 
+   GST_DEBUG_OBJECT (thiz, "start stop");
+ 
+@@ -524,7 +522,6 @@ static gboolean gst_spacemitdec_set_format(GstVideoDecoder * decoder, GstVideoCo
+ {
+ 	GstSpacemitDec *thiz = GST_SPACEMITDEC(decoder);
+   GstStructure *structure;
+-  gboolean ret = TRUE;
+   gboolean parsed = TRUE;
+ 
+ 	GST_DEBUG_OBJECT(thiz, "input caps: %" GST_PTR_FORMAT, state->caps);
+@@ -549,10 +546,10 @@ static gboolean gst_spacemitdec_set_format(GstVideoDecoder * decoder, GstVideoCo
+ 
+     parsed = thiz->dec_parse ? parsed : FALSE;
+ 
+-    gst_video_decoder_set_packetized (thiz, parsed);
++    gst_video_decoder_set_packetized (decoder, parsed);
+   }
+ 
+-	GST_DEBUG_OBJECT (thiz, "set format finish (%d, %d, %d), (%d, %d, %d)",
++	GST_DEBUG_OBJECT (thiz, "set format finish (%d, %d, %ld), (%d, %d, %ld)",
+     thiz->input_state->info.width, thiz->input_state->info.height, thiz->input_state->info.size,
+     state->info.width, state->info.height, state->info.size);
+   GST_DEBUG_OBJECT (thiz, "set format finish (%u, %s), parsed: %d",
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitdec.h b/ext/spacemit/spacemitcodec/gstspacemitdec.h
+index b860b64..510b9b5 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitdec.h
++++ b/ext/spacemit/spacemitcodec/gstspacemitdec.h
+@@ -86,8 +86,8 @@ struct _GstSpacemitDec
+   gboolean exit_flag;
+   GstBufferPool *pool;
+   FILE *fb;
+-  pthread_mutex_t finish_mtx;
+-  pthread_cond_t finish_cond;
++  GMutex finish_mtx;
++  GCond finish_cond;
+ 
+   /* parse state */
+   gboolean saw_header;
+@@ -106,8 +106,10 @@ struct _GstSpacemitDecClass
+ 
+ #define SPM_DEC_OUT_FORMATS "I420, NV21, NV12"
+ #define SPM_DEC_FORMATS SPM_DEC_OUT_FORMATS
+-//#define SPM_DEC_CAPS_MAKE(fmts) \
+-//    GST_VIDEO_CAPS_MAKE (fmts) ";"
++/*
++#define SPM_DEC_CAPS_MAKE(fmts) \
++    GST_VIDEO_CAPS_MAKE (fmts) ";"
++*/
+ #define SPM_DEC_CAPS_MAKE(fmts) \
+     GST_VIDEO_CAPS_MAKE (fmts) ";" \
+     GST_VIDEO_CAPS_MAKE_WITH_FEATURES (GST_CAPS_FEATURE_MEMORY_DMABUF, fmts)
+-- 
+2.34.1
+

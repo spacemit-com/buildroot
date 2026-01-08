@@ -1,0 +1,45 @@
+From c223f87c2e69851da9201e033fe91fac238ca27b Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Tue, 27 May 2025 16:38:53 +0800
+Subject: [PATCH] sync from bianbu-24.04/1.24.2-1bb3
+
+---
+ gst/gstpipeline.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/gst/gstpipeline.c b/gst/gstpipeline.c
+index 69248df..0fc7cf2 100644
+--- a/gst/gstpipeline.c
++++ b/gst/gstpipeline.c
+@@ -86,6 +86,7 @@
+ #include "gstinfo.h"
+ #include "gstsystemclock.h"
+ #include "gstutils.h"
++#include "gstdebugutils.h"
+ 
+ GST_DEBUG_CATEGORY_STATIC (pipeline_debug);
+ #define GST_CAT_DEFAULT pipeline_debug
+@@ -393,7 +394,7 @@ pipeline_update_start_time (GstElement * element)
+   }
+   GST_OBJECT_UNLOCK (element);
+ }
+-
++extern const gchar *priv_gst_dump_dot_dir;
+ /* MT safe */
+ static GstStateChangeReturn
+ gst_pipeline_change_state (GstElement * element, GstStateChange transition)
+@@ -433,6 +434,11 @@ gst_pipeline_change_state (GstElement * element, GstStateChange transition)
+ 
+       GST_DEBUG_OBJECT (element, "selecting clock and base_time");
+ 
++      if (g_getenv("SPACEMIT_GST_DEBUG_DUMP_DOT_DIR") != NULL) {
++        GST_ERROR_OBJECT (element, "start to save pipeline graph to /home/bianbu for spacemit");
++        priv_gst_dump_dot_dir = "/home/bianbu/";
++        gst_debug_bin_to_dot_file(GST_BIN(pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_spacemit");
++      }
+       GST_OBJECT_LOCK (element);
+       cur_clock = element->clock;
+       if (cur_clock)
+-- 
+2.34.1
+

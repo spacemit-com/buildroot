@@ -1,0 +1,29 @@
+From 04afaf8abf010ac2f23cd0c33c75bc97c4f5a5c2 Mon Sep 17 00:00:00 2001
+From: Jeremy Bicha <jeremy.bicha@canonical.com>
+Date: Tue, 1 Feb 2022 16:00:14 -0500
+Subject: [PATCH] Have libgstreamer-plugins-bad-1.0.pc Require the moved
+ copy in -good
+
+Forwarded: not-needed
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/gst-plugins-bad1.0/+bug/1170923
+
+Gbp-Pq: Name pcfile-requires-plugins-good
+---
+ meson.build | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/meson.build b/meson.build
+index 4eb7965..f350d6e 100644
+--- a/meson.build
++++ b/meson.build
+@@ -568,6 +568,7 @@ pkgconfig_subdirs = ['gstreamer-1.0']
+ 
+ pkgconfig.generate(
+   libraries : [gst_dep],
++  requires : 'gstreamer-plugins-good-1.0',
+   variables : pkgconfig_variables,
+   subdirs : pkgconfig_subdirs,
+   name : 'gstreamer-plugins-bad-1.0',
+-- 
+2.34.1
+

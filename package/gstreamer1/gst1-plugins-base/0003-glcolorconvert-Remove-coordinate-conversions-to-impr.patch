@@ -1,0 +1,275 @@
+From 6ac92615adb6419b3c487eb704c9e11f93e4f361 Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Tue, 27 May 2025 19:50:49 +0800
+Subject: [PATCH] glcolorconvert: Remove coordinate conversions to improve
+ gpu processing efficiency
+
+---
+ gst-libs/gst/gl/gstglcolorconvert.c | 174 ++++++++++++++++++++++++++++
+ 1 file changed, 174 insertions(+)
+
+diff --git a/gst-libs/gst/gl/gstglcolorconvert.c b/gst-libs/gst/gl/gstglcolorconvert.c
+index 614f325..da0d6af 100644
+--- a/gst-libs/gst/gl/gstglcolorconvert.c
++++ b/gst-libs/gst/gl/gstglcolorconvert.c
+@@ -58,6 +58,7 @@
+ #define USING_GLES(context) (gst_gl_context_check_gl_version (context, GST_GL_API_GLES, 1, 0))
+ #define USING_GLES2(context) (gst_gl_context_check_gl_version (context, GST_GL_API_GLES2, 2, 0))
+ #define USING_GLES3(context) (gst_gl_context_check_gl_version (context, GST_GL_API_GLES2, 3, 0))
++#define NO_SWIZZLE_CONVERT (1)
+ 
+ static void _do_convert (GstGLContext * context, GstGLColorConvert * convert);
+ static gboolean _init_convert (GstGLColorConvert * convert);
+@@ -226,6 +227,21 @@ static const char glsl_func_fetch_planar_yuv[] =
+     "  return yuva;\n"
+     "}\n";
+ 
++#ifdef NO_SWIZZLE_CONVERT
++/* YUV to RGB conversion */
++static const gchar templ_PLANAR_YUV_to_RGB_BODY[] =
++    /* FIXME: should get the sampling right... */
++    "vec4 yuva = fetch_planar_yuv(Ytex, Utex, Vtex, texcoord);\n"
++    "vec4 rgba = color_matrix_apply(yuva, to_RGB_matrix);\n"
++    "gl_FragColor = vec4(rgba.%c,rgba.%c,rgba.%c,rgba.%c);\n";
++
++static const struct shader_templ templ_PLANAR_YUV_to_RGB =
++  { NULL,
++    DEFAULT_UNIFORMS YUV_TO_RGB_COEFFICIENTS "uniform sampler2D Ytex, Utex, Vtex;\n" "uniform float in_bitdepth_factor;\n",
++    { glsl_func_color_matrix, glsl_func_fetch_planar_yuv, NULL, },
++    GST_GL_TEXTURE_TARGET_2D
++  };
++#else
+ /* YUV to RGB conversion */
+ static const gchar templ_PLANAR_YUV_to_RGB_BODY[] =
+     /* FIXME: should get the sampling right... */
+@@ -240,6 +256,7 @@ static const struct shader_templ templ_PLANAR_YUV_to_RGB =
+     { glsl_func_swizzle, glsl_func_color_matrix, glsl_func_fetch_planar_yuv, NULL, },
+     GST_GL_TEXTURE_TARGET_2D
+   };
++#endif
+ 
+ static const gchar templ_PLANAR_YUVA_to_RGB_BODY[] =
+     /* FIXME: should get the sampling right... */
+@@ -412,6 +429,24 @@ static const struct shader_templ templ_PLANAR_YUVA_to_PLANAR_YUV =
+     GST_GL_TEXTURE_TARGET_2D
+   };
+ 
++#ifdef NO_SWIZZLE_CONVERT
++/* semi-planar to RGB conversion */
++static const gchar templ_SEMI_PLANAR_to_RGB_BODY[] =
++    "vec4 yuva;\n"
++    /* FIXME: should get the sampling right... */
++    "yuva.x=texture2D(Ytex, texcoord * tex_scale0).r;\n"
++    "yuva.yz=texture2D(UVtex, texcoord * tex_scale1).r%c;\n"
++    "%s"
++    "vec4 rgba = color_matrix_apply (yuva, to_RGB_matrix);\n"
++    "gl_FragColor=vec4(rgba.%c,rgba.%c,rgba.%c,rgba.%c);\n";
++
++static const struct shader_templ templ_SEMI_PLANAR_to_RGB =
++  { NULL,
++    DEFAULT_UNIFORMS YUV_TO_RGB_COEFFICIENTS "uniform sampler2D Ytex, UVtex;\n",
++    { glsl_func_color_matrix, NULL, },
++    GST_GL_TEXTURE_TARGET_2D
++  };
++#else
+ /* semi-planar to RGB conversion */
+ static const gchar templ_SEMI_PLANAR_to_RGB_BODY[] =
+     "vec4 yuva;\n"
+@@ -429,6 +464,7 @@ static const struct shader_templ templ_SEMI_PLANAR_to_RGB =
+     { glsl_func_swizzle, glsl_func_color_matrix, NULL, },
+     GST_GL_TEXTURE_TARGET_2D
+   };
++#endif
+ 
+ static const struct shader_templ templ_AV12_to_RGB =
+   { NULL,
+@@ -2234,6 +2270,23 @@ _is_planar_rgb (GstVideoFormat v_format)
+   }
+ }
+ 
++static inline gchar
++_index_to_shader_swizzle (int idx)
++{
++  switch (idx) {
++    case 0:
++      return 'r';
++    case 1:
++      return 'g';
++    case 2:
++      return 'b';
++    case 3:
++      return 'a';
++    default:
++      return '#';
++  }
++}
++
+ static void
+ video_format_to_gl_reorder (GstVideoFormat v_format, gint * reorder,
+     gboolean input)
+@@ -2313,6 +2366,105 @@ calculate_reorder_indexes (GstVideoFormat in_format,
+       ret_out[3]);
+ }
+ 
++/* attempts to transform expected to want using swizzling */
++static gchar *
++_RGB_pixel_order (const gchar * expected, const gchar * wanted)
++{
++  GString *ret = g_string_sized_new (4);
++  gchar *expect, *want;
++  gchar *orig_want;
++  int len;
++  gboolean discard_output = TRUE;
++
++  if (g_ascii_strcasecmp (expected, wanted) == 0) {
++    g_string_free (ret, TRUE);
++    return g_ascii_strdown (expected, -1);
++  }
++
++  expect = g_ascii_strdown (expected, -1);
++  orig_want = want = g_ascii_strdown (wanted, -1);
++
++  if (strcmp (expect, "rgb16") == 0 || strcmp (expect, "bgr16") == 0) {
++    gchar *temp = expect;
++    expect = g_strndup (temp, 3);
++    g_free (temp);
++  } else if (strcmp (expect, "bgr10a2_le") == 0) {
++    gchar *temp = expect;
++    expect = g_strndup ("bgra", 4);
++    g_free (temp);
++  } else if (strcmp (expect, "rgb10a2_le") == 0) {
++    gchar *temp = expect;
++    expect = g_strndup ("rgba", 4);
++    g_free (temp);
++  } else if (strcmp (expect, "rgbp") == 0 || strcmp (expect, "bgrp") == 0) {
++    gchar *temp = expect;
++    expect = g_strndup (temp, 3);
++    g_free (temp);
++  }
++
++  if (strcmp (want, "rgb16") == 0 || strcmp (want, "bgr16") == 0) {
++    gchar *temp = want;
++    orig_want = want = g_strndup (temp, 3);
++    g_free (temp);
++  } else if (strcmp (want, "bgr10a2_le") == 0) {
++    gchar *temp = want;
++    orig_want = want = g_strndup ("bgra", 4);
++    g_free (temp);
++  } else if (strcmp (want, "rgb10a2_le") == 0) {
++    gchar *temp = want;
++    orig_want = want = g_strndup ("rgba", 4);
++    g_free (temp);
++  }
++
++  /* pad want with 'a's */
++  if ((len = strlen (want)) < 4) {
++    gchar *new_want = g_strndup (want, 4);
++    while (len < 4) {
++      new_want[len] = 'a';
++      len++;
++    }
++    g_free (want);
++    orig_want = want = new_want;
++  }
++
++  /* pad expect with 'a's */
++  if ((len = strlen (expect)) < 4) {
++    gchar *new_expect = g_strndup (expect, 4);
++    while (len < 4) {
++      new_expect[len] = 'a';
++      len++;
++    }
++    g_free (expect);
++    expect = new_expect;
++  }
++
++  /* build the swizzle format */
++  while (want && want[0] != '\0') {
++    gchar *val;
++    gint idx;
++    gchar needle = want[0];
++
++    if (needle == 'x')
++      needle = 'a';
++
++    if (!(val = strchr (expect, needle))
++        && needle == 'a' && !(val = strchr (expect, 'x')))
++      goto out;
++
++    idx = (gint) (val - expect);
++
++    ret = g_string_append_c (ret, _index_to_shader_swizzle (idx));
++    want = &want[1];
++  }
++
++  discard_output = FALSE;
++out:
++  g_free (orig_want);
++  g_free (expect);
++
++  return g_string_free (ret, discard_output);
++}
++
+ static guint
+ _get_n_textures (GstVideoFormat v_format)
+ {
+@@ -2478,6 +2630,8 @@ _YUV_to_RGB (GstGLColorConvert * convert)
+   GstVideoFormat in_format = GST_VIDEO_INFO_FORMAT (&convert->in_info);
+   const GstVideoFormatInfo *in_finfo = gst_video_format_get_info (in_format);
+   GstVideoFormat out_format = GST_VIDEO_INFO_FORMAT (&convert->out_info);
++  const gchar *out_format_str = gst_video_format_to_string (out_format);
++  gchar *pixel_order = _RGB_pixel_order ("rgba", out_format_str);
+   gboolean apple_ycbcr = gst_gl_context_check_feature (convert->context,
+       "GL_APPLE_ycbcr_422");
+   gboolean in_tex_rectangular = FALSE;
+@@ -2521,7 +2675,13 @@ _YUV_to_RGB (GstGLColorConvert * convert)
+       info->shader_tex_names[3] = "Atex";
+     } else {
+       info->templ = &templ_PLANAR_YUV_to_RGB;
++#ifdef NO_SWIZZLE_CONVERT
++      info->frag_body =
++          g_strdup_printf (templ_PLANAR_YUV_to_RGB_BODY, pixel_order[0],
++          pixel_order[1], pixel_order[2], pixel_order[3]);
++#else
+       info->frag_body = g_strdup (templ_PLANAR_YUV_to_RGB_BODY);
++#endif
+     }
+   } else {
+     switch (in_format) {
+@@ -2580,9 +2740,16 @@ _YUV_to_RGB (GstGLColorConvert * convert)
+             convert->priv->in_tex_formats[1] ==
+             GST_GL_LUMINANCE_ALPHA ? 'a' : 'g';
+         info->templ = &templ_SEMI_PLANAR_to_RGB;
++#ifdef NO_SWIZZLE_CONVERT
++        info->frag_body =
++            g_strdup_printf (templ_SEMI_PLANAR_to_RGB_BODY, val2,
++            "yuva.a = 1.0;\n", pixel_order[0], pixel_order[1],
++            pixel_order[2], pixel_order[3]);
++#else
+         info->frag_body =
+             g_strdup_printf (templ_SEMI_PLANAR_to_RGB_BODY, val2,
+             "yuva.a = 1.0;\n");
++#endif
+         info->shader_tex_names[0] = "Ytex";
+         info->shader_tex_names[1] = "UVtex";
+         break;
+@@ -2593,9 +2760,16 @@ _YUV_to_RGB (GstGLColorConvert * convert)
+             convert->priv->in_tex_formats[1] ==
+             GST_GL_LUMINANCE_ALPHA ? 'a' : 'g';
+         info->templ = &templ_AV12_to_RGB;
++#ifdef NO_SWIZZLE_CONVERT
++        info->frag_body =
++            g_strdup_printf (templ_SEMI_PLANAR_to_RGB_BODY, val2,
++            "yuva.a = texture2D(Atex, texcoord * tex_scale2).r;\n",
++            pixel_order[0], pixel_order[1], pixel_order[2], pixel_order[3]);
++#else
+         info->frag_body =
+             g_strdup_printf (templ_SEMI_PLANAR_to_RGB_BODY, val2,
+             "yuva.a = texture2D(Atex, texcoord * tex_scale2).r;\n");
++#endif
+         info->shader_tex_names[0] = "Ytex";
+         info->shader_tex_names[1] = "UVtex";
+         info->shader_tex_names[2] = "Atex";
+-- 
+2.34.1
+

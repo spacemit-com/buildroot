@@ -1,0 +1,83 @@
+From fa3cd47b50c4dfcb925fd84b5cc650f023f929f0 Mon Sep 17 00:00:00 2001
+From: wumingjie <mingjie.wu@spacemit.com>
+Date: Wed, 10 Dec 2025 17:11:33 +0800
+Subject: [PATCH] sync waylandsink modify from bianbu-23.10
+
+---
+ ext/wayland/gstwaylandsink.c            | 16 ++++++++++++++--
+ ext/wayland/gstwaylandsink.h            |  4 ++++
+ gst-libs/gst/wayland/gstwllinuxdmabuf.c |  2 +-
+ 3 files changed, 19 insertions(+), 3 deletions(-)
+
+diff --git a/ext/wayland/gstwaylandsink.c b/ext/wayland/gstwaylandsink.c
+index 2530eab..3d2e11c 100644
+--- a/ext/wayland/gstwaylandsink.c
++++ b/ext/wayland/gstwaylandsink.c
+@@ -73,8 +73,10 @@ GST_DEBUG_CATEGORY (gstwayland_debug);
+ static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
+     GST_PAD_SINK,
+     GST_PAD_ALWAYS,
+-    GST_STATIC_CAPS (GST_VIDEO_DMA_DRM_CAPS_MAKE ";"
+-        GST_VIDEO_CAPS_MAKE (GST_WL_VIDEO_FORMATS))
++    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE (GST_WL_VIDEO_FORMATS) ";"
++        GST_VIDEO_DMA_DRM_CAPS_MAKE ";"
++		GST_VIDEO_CAPS_MAKE_WITH_FEATURES (GST_CAPS_FEATURE_MEMORY_DMABUF,
++            GST_WL_VIDEO_FORMATS))
+     );
+ 
+ static void gst_wayland_sink_get_property (GObject * object,
+@@ -926,6 +928,12 @@ gst_wayland_sink_show_frame (GstVideoSink * vsink, GstBuffer * buffer)
+       /* if we were not provided a window, create one ourselves */
+       self->window = gst_wl_window_new_toplevel (self->display,
+           &self->video_info, self->fullscreen, &self->render_lock);
++      if (!self->fullscreen) {
++        if (self->x || self->y || self->w || self->h) {
++            GST_WARNING_OBJECT (self, "set render rectangle <%d,%d,%d,%d>", self->x, self->y, self->w, self->h);
++            gst_wl_window_set_render_rectangle (self->window, self->x, self->y, self->w, self->h);
++        }
++      }
+       g_signal_connect_object (self->window, "closed",
+           G_CALLBACK (on_window_closed), self, 0);
+       gst_wl_window_set_rotate_method (self->window,
+@@ -1223,6 +1231,10 @@ gst_wayland_sink_set_render_rectangle (GstVideoOverlay * overlay,
+   g_mutex_lock (&self->render_lock);
+   if (!self->window) {
+     g_mutex_unlock (&self->render_lock);
++    self->x = x;
++    self->y = y;
++    self->w = w;
++    self->h = h;
+     GST_WARNING_OBJECT (self,
+         "set_render_rectangle called without window, ignoring");
+     return;
+diff --git a/ext/wayland/gstwaylandsink.h b/ext/wayland/gstwaylandsink.h
+index b12e0b6..9629c0a 100644
+--- a/ext/wayland/gstwaylandsink.h
++++ b/ext/wayland/gstwaylandsink.h
+@@ -68,6 +68,10 @@ struct _GstWaylandSink
+    * OBJECT_LOCK must be taken first */
+   GMutex render_lock;
+   GstBuffer *last_buffer;
++  gint x;
++  gint y;
++  gint w;
++  gint h;
+ 
+   GstVideoOrientationMethod sink_rotate_method;
+   GstVideoOrientationMethod tag_rotate_method;
+diff --git a/gst-libs/gst/wayland/gstwllinuxdmabuf.c b/gst-libs/gst/wayland/gstwllinuxdmabuf.c
+index 54c5811..916048a 100644
+--- a/gst-libs/gst/wayland/gstwllinuxdmabuf.c
++++ b/gst-libs/gst/wayland/gstwllinuxdmabuf.c
+@@ -190,7 +190,7 @@ gst_wl_linux_dmabuf_construct_wl_buffer (GstBuffer * buf,
+   /* Wait for the request answer */
+   wl_display_flush (gst_wl_display_get_display (display));
+   data.wbuf = (gpointer) 0x1;
+-  timeout = g_get_monotonic_time () + G_TIME_SPAN_SECOND;
++  timeout = g_get_monotonic_time () + 5 * G_TIME_SPAN_SECOND;
+   while (data.wbuf == (gpointer) 0x1) {
+     if (!g_cond_wait_until (&data.cond, &data.lock, timeout)) {
+       GST_ERROR_OBJECT (mem->allocator, "zwp_linux_buffer_params_v1 time out");
+-- 
+2.34.1
+

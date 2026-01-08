@@ -1,0 +1,149 @@
+From 2a54899996173cd10ab558ddd23e7dcbac99700d Mon Sep 17 00:00:00 2001
+From: wumingjie <mingjie.wu@spacemit.com>
+Date: Wed, 10 Dec 2025 18:58:59 +0800
+Subject: [PATCH] spacemitenc: reduce encoding cache
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitenc.c | 94 +++++++++++++++++----
+ 1 file changed, 76 insertions(+), 18 deletions(-)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitenc.c b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+index 8d4006e..5d81c5b 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitenc.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+@@ -649,14 +649,6 @@ static gint32 gst_spacemitenc_request_packet (GstSpacemitEnc *thiz, gint *msize,
+   }
+ 
+   *msize = PACKET_GetLength(mpppacket);
+-  release_ret = try_to_release_upstream_buffer(thiz, &mppframe_id);
+-  if (release_ret == FALSE || mppframe_id < 0) {
+-    GST_ERROR_OBJECT (thiz, "release buffer failed");
+-  } else {
+-    GST_OBJECT_LOCK (thiz);
+-    g_queue_push_head(&thiz->id_queue, GINT_TO_POINTER(mppframe_id+1));
+-    GST_OBJECT_UNLOCK (thiz);
+-  }
+ 
+   if (thiz->eCodingType == CODING_VP8 || thiz->eCodingType == CODING_VP9) {
+     mpppacket = thiz->mpppacket_pner;
+@@ -683,16 +675,19 @@ static gint32 gst_spacemitenc_request_packet (GstSpacemitEnc *thiz, gint *msize,
+     } while (1);
+ 
+     *mpsize = PACKET_GetLength(mpppacket);
+-    release_ret = try_to_release_upstream_buffer(thiz, &mppframe_id);
+-    if (release_ret == FALSE || mppframe_id < 0) {
+-      GST_ERROR_OBJECT (thiz, "release buffer failed");
+-    } else {
+-      g_queue_push_head(&thiz->id_queue, GINT_TO_POINTER(mppframe_id+1));
+-    }
+   } else {
+     *mpsize = 0;
+   }
+ 
++  release_ret = try_to_release_upstream_buffer(thiz, &mppframe_id);
++  if (release_ret == FALSE || mppframe_id < 0) {
++    GST_ERROR_OBJECT (thiz, "release buffer failed");
++  } else {
++    GST_OBJECT_LOCK (thiz);
++    g_queue_push_head(&thiz->id_queue, GINT_TO_POINTER(mppframe_id+1));
++    GST_OBJECT_UNLOCK (thiz);
++  }
++
+ out:
+   if (ret == MPP_CODER_EOS) {
+     GST_INFO_OBJECT (thiz, "VENC_GetOutputStreamBuffer return: MPP_CODER_EOS (%d)", ret);
+@@ -769,6 +764,66 @@ done:
+   return;
+ }
+ 
++static void
++gst_spacemitenc_handle_packet (GstVideoEncoder * encoder)
++{
++  GstVideoCodecFrame * frame = NULL;
++  GstSpacemitEnc *thiz = GST_SPACEMITENC (encoder);
++  gint ret;
++  gint msize = 0, mpsize = 0;
++  GstFlowReturn flow_status;
++  GstMapInfo map;
++  static gint lenght = 0;
++
++  ret = gst_spacemitenc_request_packet(thiz, &msize, &mpsize);
++  if (ret == GST_FLOW_EOS || ret == GST_FLOW_ERROR) {
++    flow_status = ret;
++    goto done;
++  }
++
++  GST_LOG_OBJECT (thiz, "VENC_GetOutputStreamBuffer return: %d, size:(%d, %d)", ret, msize, mpsize);
++
++  frame = gst_video_encoder_get_oldest_frame (encoder);
++  if (!frame) {
++    GST_WARNING_OBJECT (thiz, "get oldest frame with null");
++
++    GstBuffer *buffer;
++    buffer = gst_video_encoder_allocate_output_buffer (encoder, msize + mpsize);
++    copy_mpppacket_to_gstbuffer (thiz, buffer, msize, mpsize);
++    flow_status = gst_pad_push (GST_VIDEO_ENCODER_SRC_PAD (thiz), buffer);
++  } else {
++    GST_VIDEO_CODEC_FRAME_UNSET_SYNC_POINT (frame);
++
++    frame->output_buffer = gst_video_encoder_allocate_output_buffer (encoder, msize + mpsize);
++    copy_mpppacket_to_gstbuffer (thiz, frame->output_buffer, msize, mpsize);
++
++    lenght += msize + mpsize;
++    GST_DEBUG_OBJECT (thiz, "loop finish frame %p, ref_count:%d, buf(%p, %p) ref:(%d, %d) (F: %d), pts:%ld",
++      frame, frame->ref_count, frame->input_buffer, frame->output_buffer, GST_MINI_OBJECT_REFCOUNT_VALUE(frame->input_buffer),
++      GST_MINI_OBJECT_REFCOUNT_VALUE(frame->output_buffer), g_atomic_int_get(&thiz->pending_frames), PACKET_GetPts(thiz->mpppacket));
++
++    flow_status = gst_video_encoder_finish_frame (encoder, frame);
++  }
++  g_atomic_int_dec_and_test(&thiz->pending_frames);
++  // thiz->pending_frames--;
++
++done:
++  thiz->downstream_flow_ret = flow_status;
++  if (thiz->downstream_flow_ret == GST_FLOW_EOS) {  //EOS flow
++    drain_all_upstream_buffer(thiz);
++    GST_DEBUG_OBJECT (thiz, "Get eos, Finish work and pause task!");
++  } else if (thiz->downstream_flow_ret == GST_FLOW_ERROR) {
++    //pass
++    drain_all_upstream_buffer(thiz);
++    GST_ERROR_OBJECT (thiz, "GST_FLOW_ERROR, Finish work and pause task! (%d)", g_atomic_int_get(&thiz->pending_frames));
++  } else if (thiz->downstream_flow_ret != GST_FLOW_OK) {  //other flow
++    GST_WARNING_OBJECT (thiz, "unsupport handle flow status: %d", thiz->downstream_flow_ret);
++  }
++
++  // try_to_release_upstream_buffer(thiz);
++  return;
++}
++
+ static MppPixelFormat gst_change_to_mpp_format(GstVideoFormat format)
+ {
+   MppPixelFormat pixel;
+@@ -1171,10 +1226,10 @@ gst_spacemitenc_handle_frame (GstVideoEncoder * encoder,
+     if (!gst_video_encoder_negotiate (encoder))
+       goto negotiate_err;
+ 
+-    if (!gst_pad_get_task_state ((encoder)->srcpad) == GST_TASK_STARTED) {
+-      GST_DEBUG_OBJECT (thiz, "start enc thread");
+-      gst_pad_start_task (encoder->srcpad, (GstTaskFunction) gst_spacemitenc_loop, encoder, NULL);
+-    }
++    // if (!gst_pad_get_task_state ((encoder)->srcpad) == GST_TASK_STARTED) {
++    //   GST_DEBUG_OBJECT (thiz, "start enc thread");
++    //   gst_pad_start_task (encoder->srcpad, (GstTaskFunction) gst_spacemitenc_loop, encoder, NULL);
++    // }
+   }
+ 
+   GST_VIDEO_ENCODER_STREAM_UNLOCK (encoder);
+@@ -1194,6 +1249,9 @@ gst_spacemitenc_handle_frame (GstVideoEncoder * encoder,
+ 
+   flow_ret = thiz->downstream_flow_ret;
+ 
++  /* Waiting encode finish and push packet to downstream */
++  gst_spacemitenc_handle_packet (encoder);
++
+   if (frame) {
+     GST_DEBUG_OBJECT (thiz, "finish handle frame:%p, ref_count:%d, finish sum:%d, buf%p, ref: %d, F:%d",
+       frame, frame->ref_count, thiz->frame_count, frame->input_buffer, GST_MINI_OBJECT_REFCOUNT_VALUE(frame->input_buffer), g_atomic_int_get(&thiz->pending_frames));
+-- 
+2.34.1
+

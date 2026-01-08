@@ -1,0 +1,25 @@
+From bf7db2af1f6afa490601a37f09774e9e76863c26 Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Sun, 28 Dec 2025 16:51:49 +0800
+Subject: [PATCH] fix compile error
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitenc.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitenc.c b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+index 5d81c5b..6173677 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitenc.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+@@ -941,8 +941,6 @@ gst_spacemitenc_init_encoder (GstSpacemitEnc * thiz,
+   if (ret)
+     goto err_exit;
+ 
+-  VENC_SetParam(thiz->ctx, &(thiz->ctx->stVencPara));
+-
+   if (thiz->eCodingType == CODING_VP8 || thiz->eCodingType == CODING_VP9) {
+     thiz->mpppacket_pner = PACKET_Create ();
+     if (!thiz->mpppacket_pner)
+-- 
+2.34.1
+

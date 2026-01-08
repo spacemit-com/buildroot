@@ -1,0 +1,118 @@
+From 48f03dbdbf48c1343cdb0455d228de3d4e21815f Mon Sep 17 00:00:00 2001
+From: wumingjie <mingjie.wu@spacemit.com>
+Date: Wed, 10 Dec 2025 17:47:51 +0800
+Subject: [PATCH] fix GST_PAD_STREAM_LOCK fail in post_activate when
+ totem-video-thumbnailer
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitdec.c | 18 ++++++++++++++++--
+ ext/spacemit/spacemitcodec/gstspacemitdec.h |  1 +
+ 2 files changed, 17 insertions(+), 2 deletions(-)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitdec.c b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+index e17c5b5..dfa8d3c 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitdec.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+@@ -256,6 +256,7 @@ static void gst_spacemitdec_init (GstSpacemitDec * thiz)
+   thiz->wait_reschange = TRUE;
+   thiz->save_dec = FALSE;
+   thiz->dec_parse = TRUE;
++  thiz->exit_flag = FALSE;
+ 
+   g_mutex_init (&thiz->finish_mtx);
+   g_cond_init (&thiz->finish_cond);
+@@ -404,7 +405,7 @@ static gboolean gst_spacemitdec_stop(GstVideoDecoder * decoder)
+     GST_DEBUG_OBJECT (thiz, "finish stop");
+     return TRUE;
+   }
+-
++  thiz->exit_flag = TRUE;
+   gst_pad_stop_task (decoder->srcpad);
+   GST_DEBUG_OBJECT (thiz, "finish stop222");
+ 
+@@ -579,6 +580,7 @@ gst_spacemitdec_flush (GstVideoDecoder * decoder)
+     }
+     GST_DEBUG_OBJECT(thiz, "finish FLUSH test5");
+     //GST_OBJECT_UNLOCK (task);
++    thiz->exit_flag = TRUE;
+     gst_pad_stop_task (decoder->srcpad);
+   }
+   GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+@@ -947,7 +949,8 @@ done:
+   if (thiz->downstream_flow_ret != GST_FLOW_OK) {
+     GST_INFO_OBJECT (thiz,  "pause task in dec loop (%d)!", thiz->downstream_flow_ret);
+     gst_pad_pause_task (GST_VIDEO_DECODER_SRC_PAD (thiz));
+-    GST_SPACEMITDEC_BROADCAST(thiz);
++    thiz->exit_flag = TRUE;
++    // GST_SPACEMITDEC_BROADCAST(thiz);
+   }
+ 
+ 	return;
+@@ -1033,6 +1036,10 @@ static gint32 gst_spacemitdec_vdec_decode (GstSpacemitDec * thiz, GstMapInfo *ma
+     if (ret != MPP_POLL_FAILED) {
+       break;
+     } else {
++      if (thiz->exit_flag) {
++        ret = MPP_OK;
++        break;
++      }
+       if (count >= 2 && count < MAX_POLL_TIME) {
+         g_usleep(500);
+       } else if (count >= MAX_POLL_TIME) {
+@@ -1075,6 +1082,7 @@ static GstFlowReturn gst_spacemitdec_decode_one_frame (GstVideoDecoder * decoder
+       GST_ELEMENT_ERROR (thiz, STREAM, DECODE, ("Could not decode frame"), ("VDEC_Decode return %d", ret));
+       return GST_FLOW_ERROR;
+     } else {
++      GST_DEBUG_OBJECT (thiz, "vdec_decode ok, %d!", ret);
+       return GST_FLOW_OK;
+     }
+    } else {
+@@ -1096,6 +1104,7 @@ gst_spacemitdec_handle_frame (GstVideoDecoder * decoder,
+   // guint actual_width, actual_height;
+   GstFlowReturn ret;
+ 
++  GST_LOG_OBJECT (thiz, "handle frame");
+   if (G_UNLIKELY (thiz->flushing))
+     goto flushing;
+ 
+@@ -1126,6 +1135,8 @@ gst_spacemitdec_handle_frame (GstVideoDecoder * decoder,
+   // need restart after totem seek (gst_spacemitdec_flush)
+   if (G_UNLIKELY (!gst_pad_get_task_state ((decoder)->srcpad) == GST_TASK_STARTED) && !thiz->flushing) {
+     GST_DEBUG_OBJECT (thiz, "start dec thread");
++    thiz->exit_flag = FALSE;
++
+     gst_pad_start_task (decoder->srcpad,
+         (GstTaskFunction) gst_spacemitdec_loop, decoder, NULL);
+   }
+@@ -1409,6 +1420,8 @@ static GstFlowReturn gst_spacemitdec_finish(GstVideoDecoder * decoder)
+     GST_DEBUG_OBJECT(thiz, "finish test5");
+     //GST_OBJECT_UNLOCK (task);
+   }
++  thiz->exit_flag = TRUE;
++
+   gst_pad_stop_task (decoder->srcpad);
+   GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+ 
+@@ -1489,6 +1502,7 @@ gst_spacemitdec_dec_change_state (GstElement * element, GstStateChange transitio
+ 
+     if (gst_pad_get_task_state (decoder->srcpad) == GST_TASK_PAUSED) {
+       GST_DEBUG_OBJECT (thiz, "stopping decoding thread");
++      thiz->exit_flag = TRUE;
+       gst_pad_stop_task (decoder->srcpad);
+       GST_DEBUG_OBJECT (thiz, "stopping decoding thread SUCCESS");
+     }
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitdec.h b/ext/spacemit/spacemitcodec/gstspacemitdec.h
+index 3de7507..b860b64 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitdec.h
++++ b/ext/spacemit/spacemitcodec/gstspacemitdec.h
+@@ -83,6 +83,7 @@ struct _GstSpacemitDec
+   gboolean req_nonblock;
+   gboolean save_dec;
+   gboolean wait_reschange;
++  gboolean exit_flag;
+   GstBufferPool *pool;
+   FILE *fb;
+   pthread_mutex_t finish_mtx;
+-- 
+2.34.1
+

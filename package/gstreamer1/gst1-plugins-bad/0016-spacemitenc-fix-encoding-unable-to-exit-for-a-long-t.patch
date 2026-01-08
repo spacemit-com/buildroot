@@ -1,0 +1,41 @@
+From a832fc8f86d5c5532e155cef100278ac42554f99 Mon Sep 17 00:00:00 2001
+From: wumingjie <mingjie.wu@spacemit.com>
+Date: Wed, 10 Dec 2025 17:58:22 +0800
+Subject: [PATCH] spacemitenc: fix encoding unable to exit for a long
+ time
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitenc.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitenc.c b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+index de44765..4903102 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitenc.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+@@ -620,6 +620,11 @@ static gint32 gst_spacemitenc_request_packet (GstSpacemitEnc *thiz, gint *msize,
+         ret = MPP_POLL_FAILED;
+         goto out;
+       }
++      if (thiz->downstream_flow_ret == GST_FLOW_FLUSHING) {
++        ret = MPP_POLL_FAILED;
++        GST_WARNING_OBJECT (thiz, "GST_FLOW_FLUSHING, exit.");
++        goto out;
++      }
+     }
+     count++;
+   } while (1);
+@@ -646,6 +651,11 @@ static gint32 gst_spacemitenc_request_packet (GstSpacemitEnc *thiz, gint *msize,
+           ret = MPP_POLL_FAILED;
+           goto out;
+         }
++        if (thiz->downstream_flow_ret == GST_FLOW_FLUSHING) {
++          ret = MPP_POLL_FAILED;
++          GST_WARNING_OBJECT (thiz, "GST_FLOW_FLUSHING, exit.");
++          goto out;
++        }
+       }
+       count++;
+     } while (1);
+-- 
+2.34.1
+

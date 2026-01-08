@@ -1,0 +1,37 @@
+From e329358ab2f2465454daff528ae25bee38256c5a Mon Sep 17 00:00:00 2001
+From: Marc Leeman <marc.leeman@gmail.com>
+Date: Tue, 9 Dec 2025 16:25:31 +0800
+Subject: [PATCH] Disable a number of failing GL tests on ppc64el
+
+Forwarded: not-needed
+Last-Update: 2025-01-29
+
+A regression in mesa causes instability on ppc64el, so until that is
+fixed, disable the tests.
+
+See https://gitlab.freedesktop.org/mesa/mesa/-/issues/12452
+
+Gbp-Pq: Name 0001-skip-failing-tests.patch
+---
+ tests/check/meson.build | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tests/check/meson.build b/tests/check/meson.build
+index 1817abf..2be224b 100644
+--- a/tests/check/meson.build
++++ b/tests/check/meson.build
+@@ -103,9 +103,9 @@ if build_gstgl and host_machine.system() != 'windows'
+     [ 'libs/gstglsl.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
+     [ 'libs/gstglslstage.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
+     [ 'libs/gstglupload.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
+-    [ 'elements/glimagesink.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
++    [ 'elements/glimagesink.c', true, [gstgl_dep, gstglproto_dep]],
+     [ 'elements/glbin.c', not build_gstgl ],
+-    [ 'pipelines/gl-launch-lines.c', not build_gstgl ],
++    [ 'pipelines/gl-launch-lines.c', true ],
+     [ 'elements/glfilter.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
+     [ 'elements/glstereo.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
+     [ 'elements/glmixer.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
+-- 
+2.34.1
+

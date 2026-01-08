@@ -1,0 +1,137 @@
+From e35103e66a7c4a015ecf8497c7db370d508e2b64 Mon Sep 17 00:00:00 2001
+From: wumingjie <mingjie.wu@spacemit.com>
+Date: Wed, 10 Dec 2025 17:51:41 +0800
+Subject: [PATCH] spacemitcodec: fix spacemitsrc to spacemith264enc queue
+ buffer error
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitenc.c | 92 ++++++++++-----------
+ 1 file changed, 43 insertions(+), 49 deletions(-)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitenc.c b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+index 22c079b..4c9fdd1 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitenc.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+@@ -828,6 +828,7 @@ gst_spacemitenc_init_encoder (GstSpacemitEnc * thiz,
+ 
+   if (_gst_caps_has_feature (state->caps, GST_CAPS_FEATURE_MEMORY_DMABUF)) {
+     GST_DEBUG_OBJECT (thiz, "upstream element had dmabuf memory caps, is spacemitdec!!");
++    thiz->ctx->stVencPara.eFrameBufferType = MPP_FRAME_BUFFERTYPE_DMABUF_EXTERNAL;
+   } else {
+     GST_DEBUG_OBJECT (thiz, "upstream element had no dmabuf memory caps");
+     thiz->ctx->stVencPara.eFrameBufferType = MPP_FRAME_BUFFERTYPE_NORMAL_EXTERNAL;
+@@ -1009,69 +1010,62 @@ static GstFlowReturn gst_spacemitenc_encode_one_frame (GstVideoEncoder * encoder
+   GstVideoFrame video_frame;
+   gint32 ret;
+   gint32 mppframe_id;
++  GstMemory *mem = NULL;
++  gint fd = -1;
+ 
+   if (frame) {
+     GST_DEBUG_OBJECT (thiz, "handle a frame %p, snb:%u, input buffer pts: %"  GST_TIME_FORMAT ", dts %" GST_TIME_FORMAT,
+         frame, frame->system_frame_number, GST_TIME_ARGS (GST_BUFFER_PTS (frame->input_buffer)),
+         GST_TIME_ARGS (GST_BUFFER_DTS (frame->input_buffer)));
+ 
+-    if (thiz->ctx->stVencPara.eFrameBufferType != MPP_FRAME_BUFFERTYPE_NORMAL_EXTERNAL) {
+-      mppframe = get_mppframe_from_vdec_mem (thiz, frame->input_buffer);  //mppframe is from spacemitdec
+-      if (!mppframe) {
+-        flow_ret = GST_FLOW_ERROR;
+-        goto done;
+-      }
+-    } else {
+-      mppframe = FRAME_Create();
+-      //FIXME: get VENC_ReturnInputFrame id and set in mppframe id
+-      if (thiz->frame_count >= MPP_ENCODER_FRAME_MAX) {
+-        ret = try_to_release_upstream_buffer(thiz, &mppframe_id);
+-        if (ret == FALSE) {
+-          flow_ret = GST_FLOW_ERROR;
+-          goto done;
+-        }
+-      } else {
+-        mppframe_id = thiz->frame_count % MPP_ENCODER_FRAME_MAX;
+-      }
+-      FRAME_SetID(mppframe, mppframe_id);
+-      gst_mini_object_weak_ref(GST_MINI_OBJECT(frame->input_buffer),
+-                              (GstMiniObjectNotify) gstbuffer_disposed,
+-                              mppframe);
+-
+-      gst_video_frame_map (&video_frame, &thiz->input_state->info, frame->input_buffer, GST_MAP_READ);
+-      if (thiz->PixelFormat == PIXEL_FORMAT_I420) {
+-        FRAME_SetDataUsedNum(mppframe, 3);
+-        FRAME_SetDataPointer(mppframe, 0, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 0));
+-        FRAME_SetDataPointer(mppframe, 1, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 1));
+-        FRAME_SetDataPointer(mppframe, 2, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 2));
+-
+-
+-
+-      } else {
+-  #if 0
+-        //SF_OMX_BUF_INFO *pBufInfo = pOMXBuffer->pOutputPortPrivate;
+-        //LOG(SF_LOG_INFO, "%p %d %p\r\n", pOMXBuffer->pBuffer, pOMXBuffer->nFilledLen, pBufInfo->remap_vaddr);
+-        GST_DEBUG_OBJECT (thiz, "debug save video_frame in file: %s, %d, (%d, %d, %d)",
+-          gst_video_format_to_string(GST_VIDEO_FRAME_FORMAT(&video_frame)),
+-          GST_VIDEO_FRAME_N_PLANES(&video_frame), GST_VIDEO_FRAME_SIZE(&video_frame),
+-          GST_VIDEO_FRAME_WIDTH(&video_frame), GST_VIDEO_FRAME_HEIGHT(&video_frame));
+-        fwrite(GST_VIDEO_FRAME_COMP_DATA (&video_frame, 0), 1, GST_VIDEO_FRAME_WIDTH(&video_frame)*GST_VIDEO_FRAME_HEIGHT(&video_frame), fbbb);
+-        fwrite(GST_VIDEO_FRAME_COMP_DATA (&video_frame, 1), 1, GST_VIDEO_FRAME_WIDTH(&video_frame)*GST_VIDEO_FRAME_HEIGHT(&video_frame)/2, fbbb);
+-        fsync(fbbb);
+-  #endif
+-        FRAME_SetDataUsedNum(mppframe, 2);
+-        FRAME_SetDataPointer(mppframe, 0, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 0));
+-        FRAME_SetDataPointer(mppframe, 1, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 1));
+-      }
+-      gst_video_frame_unmap (&video_frame);
++    mppframe = FRAME_Create();
++    mppframe_id = thiz->frame_count % MPP_ENCODER_FRAME_MAX;
++    FRAME_SetID(mppframe, mppframe_id);
++    gst_mini_object_weak_ref(GST_MINI_OBJECT(frame->input_buffer),
++                            (GstMiniObjectNotify) gstbuffer_disposed,
++                            mppframe);
++
++    if (thiz->ctx->stVencPara.eFrameBufferType == MPP_FRAME_BUFFERTYPE_DMABUF_EXTERNAL) {
++      mem = gst_buffer_peek_memory(frame->input_buffer, 0);
++      fd = gst_dmabuf_memory_get_fd(mem);
++      FRAME_SetFD(mppframe, fd, 0);
++    }
+ 
++    gst_video_frame_map (&video_frame, &thiz->input_state->info, frame->input_buffer, GST_MAP_READ);
++    if (thiz->PixelFormat == PIXEL_FORMAT_I420) {
++      FRAME_SetDataUsedNum(mppframe, 3);
++      FRAME_SetDataPointer(mppframe, 0, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 0));
++      FRAME_SetDataPointer(mppframe, 1, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 1));
++      FRAME_SetDataPointer(mppframe, 2, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 2));
++    } else {
++#if 0
++      //SF_OMX_BUF_INFO *pBufInfo = pOMXBuffer->pOutputPortPrivate;
++      //LOG(SF_LOG_INFO, "%p %d %p\r\n", pOMXBuffer->pBuffer, pOMXBuffer->nFilledLen, pBufInfo->remap_vaddr);
++      GST_DEBUG_OBJECT (thiz, "debug save video_frame in file: %s, %d, (%d, %d, %d)",
++        gst_video_format_to_string(GST_VIDEO_FRAME_FORMAT(&video_frame)),
++        GST_VIDEO_FRAME_N_PLANES(&video_frame), GST_VIDEO_FRAME_SIZE(&video_frame),
++        GST_VIDEO_FRAME_WIDTH(&video_frame), GST_VIDEO_FRAME_HEIGHT(&video_frame));
++      fwrite(GST_VIDEO_FRAME_COMP_DATA (&video_frame, 0), 1, GST_VIDEO_FRAME_WIDTH(&video_frame)*GST_VIDEO_FRAME_HEIGHT(&video_frame), fbbb);
++      fwrite(GST_VIDEO_FRAME_COMP_DATA (&video_frame, 1), 1, GST_VIDEO_FRAME_WIDTH(&video_frame)*GST_VIDEO_FRAME_HEIGHT(&video_frame)/2, fbbb);
++      fsync(fbbb);
++#endif
++      FRAME_SetDataUsedNum(mppframe, 2);
++      FRAME_SetDataPointer(mppframe, 0, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 0));
++      FRAME_SetDataPointer(mppframe, 1, GST_VIDEO_FRAME_PLANE_DATA (&video_frame, 1));
+     }
++    gst_video_frame_unmap (&video_frame);
+ 
+     setup_input_buffer_and_mppframe_hash (thiz, FRAME_GetID(mppframe), frame->input_buffer);
+ 
+     FRAME_SetEos(mppframe, FRAME_NO_EOS);
+     FRAME_SetPts(mppframe, GST_BUFFER_PTS (frame->input_buffer));
+     thiz->frame_count++;
++
++    ret = try_to_release_upstream_buffer(thiz, &mppframe_id);
++    if (ret == FALSE) {
++      flow_ret = GST_FLOW_ERROR;
++      goto done;
++    }
+   } else {
+     GST_DEBUG_OBJECT (thiz, "null frame enc, need eos");
+     FRAME_SetEos(thiz->mppframe, FRAME_EOS_WITHOUT_DATA);
+-- 
+2.34.1
+

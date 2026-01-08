@@ -95,6 +95,7 @@ config BR2_PACKAGE_GST1_PLUGINS_BASE_PLUGIN_AUDIORESAMPLE
 
 config BR2_PACKAGE_GST1_PLUGINS_BASE_PLUGIN_RAWPARSE
 	bool "rawparse"
+	default y
 	help
 	  Parses byte streams into raw frames
 

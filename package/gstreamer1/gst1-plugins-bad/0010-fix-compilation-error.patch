@@ -1,0 +1,25 @@
+From 315b7df6b4666b773ed77147620ffe9e38de2e19 Mon Sep 17 00:00:00 2001
+From: wumingjie <mingjie.wu@spacemit.com>
+Date: Wed, 10 Dec 2025 17:13:43 +0800
+Subject: [PATCH] fix compilation error
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitdec.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitdec.c b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+index 788200d..e17c5b5 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitdec.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+@@ -833,7 +833,7 @@ gst_spacemitdec_loop (GstVideoDecoder * decoder)
+ {
+   GstSpacemitDec *thiz = GST_SPACEMITDEC (decoder);
+   GstVideoCodecFrame * frame = NULL;
+-  GstFlowReturn flow_status;
++  GstFlowReturn flow_status = GST_FLOW_OK;
+   GstBuffer *outbuf = NULL;
+   gint32 req_ret;
+ 
+-- 
+2.34.1
+

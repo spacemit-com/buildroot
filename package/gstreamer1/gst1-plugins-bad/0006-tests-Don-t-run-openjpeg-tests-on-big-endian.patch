@@ -1,0 +1,28 @@
+From 2f7e5083e468f030de4cef1f773628c18682b30f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jeremy=20B=C3=ADcha?= <jbicha@ubuntu.com>
+Date: Tue, 7 Oct 2025 19:06:53 -0400
+Subject: [PATCH] tests: Don't run openjpeg tests on big-endian
+
+This could mean that openjpeg is broken on these architectures!
+
+Gbp-Pq: Name Skip-failing-tests-big-endian.patch
+---
+ tests/check/meson.build | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/check/meson.build b/tests/check/meson.build
+index 907cdb8..edabc4b 100644
+--- a/tests/check/meson.build
++++ b/tests/check/meson.build
+@@ -67,7 +67,7 @@ base_tests = [
+   [['elements/nvenc.c'], false, [gstgl_dep, gmodule_dep]],
+   [['elements/nvdec.c'], not gstgl_dep.found(), [gstgl_dep, gmodule_dep]],
+   [['elements/svthevcenc.c'], not svthevcenc_dep.found(), [svthevcenc_dep]],
+-   [['elements/openjpeg.c'], not openjpeg_dep.found(), [openjpeg_dep]],
++   [['elements/openjpeg.c'], not openjpeg_dep.found() or host_machine.endian() == 'big', [openjpeg_dep]],
+   [['elements/pcapparse.c'], false, [libparser_dep]],
+   [['elements/pnm.c'], get_option('pnm').disabled()],
+   [['elements/proxysink.c'], get_option('proxy').disabled()],
+-- 
+2.34.1
+
