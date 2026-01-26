@@ -1,0 +1,66 @@
+From e9c251e963e78a67876b2e561dc7e08be315f8a1 Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Mon, 18 Nov 2024 10:35:07 +0800
+Subject: [PATCH 01/12] fix bug: Non-4-byte aligned videos cannot be played
+ using totem
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitdec.c | 22 +++++++++++++++------
+ 1 file changed, 16 insertions(+), 6 deletions(-)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitdec.c b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+index dfa8d3c..62e6c92 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitdec.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitdec.c
+@@ -43,6 +43,9 @@ GST_DEBUG_CATEGORY_STATIC (gst_spacemitdec_debug_category);
+   g_cond_wait (&thiz->finish_cond, &thiz->finish_mtx); \
+   g_mutex_unlock (&thiz->finish_mtx);
+ 
++#define STRIDE_ALIGN (4)
++#define GST_ALIGN_UP(x, align) ((x + (align - 1)) & ~(align - 1))
++
+ /* prototypes */
+ static void gst_spacemitdec_set_property (GObject * object,
+     guint property_id, const GValue * value, GParamSpec * pspec);
+@@ -480,6 +483,7 @@ gst_spacemitdec_init_decoder (GstSpacemitDec * thiz)
+     thiz->ctx->stVdecPara.eCodingType = thiz->eCodingType;
+     thiz->ctx->stVdecPara.nWidth = thiz->width;
+     thiz->ctx->stVdecPara.nHeight = thiz->height;
++    thiz->ctx->stVdecPara.nAlign = STRIDE_ALIGN;
+     thiz->ctx->stVdecPara.eOutputPixelFormat = thiz->eOutputPixelFormat;
+     thiz->ctx->eCodecType = thiz->eCodecType;
+     thiz->ctx->stVdecPara.nScale = thiz->downscale;
+@@ -723,18 +727,24 @@ gst_spacemitdec_fill_output_buffer (GstVideoDecoder * decoder,
+   if (thiz->buffertype == MPP_FRAME_BUFFERTYPE_DMABUF_INTERNAL) {
+     newbuf = gst_buffer_new ();
+     mem = gst_dmabuf_allocator_alloc_with_flags (thiz->allocator, fd,
+-      thiz->width * thiz->height * 1.5, GST_FD_MEMORY_FLAG_DONT_CLOSE);
++      GST_ALIGN_UP(thiz->width, STRIDE_ALIGN) * thiz->height * 1.5,
++      GST_FD_MEMORY_FLAG_DONT_CLOSE);
+     gst_mini_object_set_qdata (GST_MINI_OBJECT (mem), GST_SPACEMIT_DEC_DMABUF_MEMORY_QUARK, thiz->mppframe, decoder_memory_release);
+     gst_buffer_append_memory (newbuf, mem);
+   } else {
+-    guint8 *ptr = (guint8 *)g_malloc (thiz->width * thiz->height * 1.5);
+-    memcpy (ptr, FRAME_GetDataPointer(thiz->mppframe, 0), thiz->width * thiz->height);
+-    memcpy (ptr + thiz->width * thiz->height, FRAME_GetDataPointer(thiz->mppframe, 1), thiz->width * thiz->height / 2);
++    guint8 *ptr = (guint8 *)g_malloc(
++      GST_ALIGN_UP(thiz->width, STRIDE_ALIGN) * thiz->height * 1.5);
++    memcpy (ptr, FRAME_GetDataPointer(thiz->mppframe, 0),
++      GST_ALIGN_UP(thiz->width, STRIDE_ALIGN) * thiz->height);
++    memcpy (ptr + GST_ALIGN_UP(thiz->width, STRIDE_ALIGN) * thiz->height,
++      FRAME_GetDataPointer(thiz->mppframe, 1),
++      GST_ALIGN_UP(thiz->width, STRIDE_ALIGN) * thiz->height / 2);
+ 
+     newbuf = gst_buffer_new_wrapped_full ((GstMemoryFlags)
+       GST_MEMORY_FLAG_READONLY,
+-      (gpointer) ptr, thiz->width * thiz->height * 1.5, 0,
+-      thiz->width * thiz->height * 1.5, ptr,
++      (gpointer) ptr,
++      GST_ALIGN_UP(thiz->width, STRIDE_ALIGN) * thiz->height * 1.5, 0,
++      GST_ALIGN_UP(thiz->width, STRIDE_ALIGN) * thiz->height * 1.5, ptr,
+       (GDestroyNotify) g_free);
+     VDEC_ReturnOutputFrame(thiz->ctx, FRAME_GetBaseData(thiz->mppframe));
+     FRAME_Destory(thiz->mppframe);
+-- 
+2.34.1
+

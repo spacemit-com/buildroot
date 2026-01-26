@@ -1,0 +1,25 @@
+From efcc20013d68a00edd0537f5569205640f64086e Mon Sep 17 00:00:00 2001
+From: mengbinghan <binghan.meng@spacemit.com>
+Date: Sat, 10 May 2025 16:01:57 +0800
+Subject: [PATCH 09/12] fix the abnormal exit of the Cheese-Camare video
+ encoding
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitenc.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitenc.c b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+index fb446e7..6408f71 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitenc.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+@@ -470,6 +470,7 @@ gst_spacemitenc_start (GstVideoEncoder * encoder)
+   // thiz->pending_frames = 0;
+   thiz->downstream_flow_ret = GST_FLOW_OK;
+   thiz->frame_count = 0;
++  thiz->at_eos = FALSE;
+   // fbbb = fopen("/home/bianbu/out.yuv", "ab+");
+   // fbbb = fopen("/home/bianbu/out.yuv", "wb");
+ 
+-- 
+2.34.1
+

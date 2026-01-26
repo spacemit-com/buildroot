@@ -1,0 +1,171 @@
+From 6abbff7b1982a5d257fb10546df55825bf5f7c95 Mon Sep 17 00:00:00 2001
+From: lizhirong <zhirong.li@spacemit.com>
+Date: Tue, 11 Feb 2025 17:41:47 +0800
+Subject: [PATCH 05/12] spacemitsrc: add drop-frames setting attributes
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitenc.c |  4 +--
+ ext/spacemit/spacemitsrc/gstspacemitsrc.c   | 39 +++++++++++++++------
+ ext/spacemit/spacemitsrc/gstspacemitsrc.h   |  3 +-
+ 3 files changed, 32 insertions(+), 14 deletions(-)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitenc.c b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+index de44765..5a9d085 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitenc.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+@@ -610,8 +610,8 @@ static gint32 gst_spacemitenc_request_packet (GstSpacemitEnc *thiz, gint *msize,
+         g_usleep(500);
+       } else if (count >= 800 && count < MAX_POLL_TIME) {
+         g_usleep(500);
+-        if (g_atomic_int_get(&thiz->pending_frames) <= 0) {
+-          GST_WARNING_OBJECT (thiz, "maybe no enc task to do, exit");
++        if (g_atomic_int_get(&thiz->pending_frames) <= 0 && thiz->at_eos == TRUE) {
++          GST_WARNING_OBJECT (thiz, "maybe no enc task to do, exit.");
+           ret = MPP_POLL_FAILED;
+           goto out;
+         }
+diff --git a/ext/spacemit/spacemitsrc/gstspacemitsrc.c b/ext/spacemit/spacemitsrc/gstspacemitsrc.c
+index 894a770..87fbf57 100644
+--- a/ext/spacemit/spacemitsrc/gstspacemitsrc.c
++++ b/ext/spacemit/spacemitsrc/gstspacemitsrc.c
+@@ -69,7 +69,7 @@ enum
+   PROP_DEVICE_INDEX,
+   PROP_NUM_CAPTURE_BUFFERS,
+   PROP_TIMEOUT,
+-  PROP_EXPOSURE,
++  PROP_DROP_FRAMES,
+   PROP_GAIN,
+   PROP_OFFSET,
+   PROP_FORMAT,
+@@ -84,7 +84,7 @@ enum
+ #define DEFAULT_PROP_DEVICE_INDEX 0
+ #define DEFAULT_PROP_NUM_CAPTURE_BUFFERS 3
+ #define DEFAULT_PROP_TIMEOUT 500
+-#define DEFAULT_PROP_EXPOSURE 16384
++#define DEFAULT_PROP_DROP_FRAMES 0
+ #define DEFAULT_PROP_GAIN 1.0
+ #define DEFAULT_PROP_OFFSET 0
+ //#define DEFAULT_PROP_FORMAT qfmtMono16
+@@ -181,10 +181,15 @@ gst_spacemitsrc_class_init (GstSpacemitSrcClass * klass)
+           "Timeout in ms to wait for a frame beyond exposure time", 0, G_MAXINT,
+           DEFAULT_PROP_TIMEOUT,
+           (GParamFlags) (G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE)));
+-  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_EXPOSURE,
+-      g_param_spec_uint ("exposure", "Exposure (us)",
+-          "Exposure time in microseconds", 0, G_MAXINT, DEFAULT_PROP_EXPOSURE,
++  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_DROP_FRAMES,
++      g_param_spec_uint ("drop-frames", "Drop frames",
++          "Drop frames before push buffer", 0, 100,
++          DEFAULT_PROP_DROP_FRAMES,
+           (GParamFlags) (G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE)));
++  // g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_DROP_FRAMES,
++  //     g_param_spec_uint ("Drop frames", "Drop frames",
++  //         "Drop frames before push buffer", 0, 60, DEFAULT_PROP_DROP_FRAMES,
++  //         (GParamFlags) (G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE)));
+   g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_GAIN,
+       g_param_spec_double ("gain", "Normalized gain", "Normalized gain", 0,
+           1000, DEFAULT_PROP_GAIN,
+@@ -228,7 +233,8 @@ gst_spacemitsrc_reset (GstSpacemitSrc * src)
+ {
+ //  src->handle = NULL;
+ 
+-  src->exposure = DEFAULT_PROP_EXPOSURE;
++  src->need_drop_frames = DEFAULT_PROP_DROP_FRAMES;
++  src->had_drop_frames = 0;
+   src->gain = DEFAULT_PROP_GAIN;
+   src->offset = DEFAULT_PROP_OFFSET;
+   src->format = DEFAULT_PROP_FORMAT;
+@@ -342,9 +348,8 @@ gst_spacemitsrc_set_property (GObject * object, guint property_id,
+     case PROP_TIMEOUT:
+       src->timeout = g_value_get_int (value);
+       break;
+-    case PROP_EXPOSURE:
+-      src->exposure = g_value_get_uint (value);
+-      src->send_settings = TRUE;
++    case PROP_DROP_FRAMES:
++      src->need_drop_frames = g_value_get_uint (value);
+       break;
+     case PROP_GAIN:
+       src->gain = g_value_get_double (value);
+@@ -404,8 +409,8 @@ gst_spacemitsrc_get_property (GObject * object, guint property_id,
+     case PROP_TIMEOUT:
+       g_value_set_int (value, src->timeout);
+       break;
+-    case PROP_EXPOSURE:
+-      g_value_set_uint (value, src->exposure);
++    case PROP_DROP_FRAMES:
++      g_value_set_uint (value, src->need_drop_frames);
+       break;
+     case PROP_GAIN:
+       g_value_set_double (value, src->gain);
+@@ -447,6 +452,7 @@ gst_spacemitsrc_dispose (GObject * object)
+ 
+   g_return_if_fail (GST_IS_SPACEMIT_SRC (object));
+   src = GST_SPACEMIT_SRC (object);
++  GST_DEBUG_OBJECT (src, "dispose");
+ 
+   /* clean up as possible.  may be called multiple times */
+ 
+@@ -460,6 +466,7 @@ gst_spacemitsrc_finalize (GObject * object)
+ 
+   g_return_if_fail (GST_IS_SPACEMIT_SRC (object));
+   src = GST_SPACEMIT_SRC (object);
++  GST_DEBUG_OBJECT (src, "finalize");
+ 
+   /* clean up object here */
+ 
+@@ -624,6 +631,7 @@ gst_spacemitsrc_start (GstBaseSrc * bsrc)
+   GstSpacemitSrc *src = GST_SPACEMIT_SRC (bsrc);
+ 
+   GST_DEBUG_OBJECT (src, "start");
++  src->had_drop_frames = 0;
+ 
+   if (!gst_spacemitsrc_setup_stream (src)) {
+     GST_ERROR_OBJECT (src, "setup stream error");
+@@ -783,6 +791,7 @@ gst_spacemitsrc_create (GstPushSrc * psrc, GstBuffer ** buf)
+   guint64 timeout = 1 * 100 * 1000 * 1000;//100秒
+ 
+   GST_DEBUG_OBJECT (src, "create");
++try_again:
+   //wait queue and get cpp output buffer
+   outputBuf = (IMAGE_BUFFER_S *) g_async_queue_timeout_pop (src->queue, (guint64) timeout);
+   if (!outputBuf) {
+@@ -791,6 +800,7 @@ gst_spacemitsrc_create (GstPushSrc * psrc, GstBuffer ** buf)
+       return GST_FLOW_ERROR;
+   }
+   GST_DEBUG_OBJECT (src, "pop a cpp out buffer %p, fd: %d,  gst queue %p had %d buffer", outputBuf, outputBuf->m.fd, src->queue, g_async_queue_length(src->queue));
++
+   video_frame = (VideoFrame *) g_hash_table_lookup (frame_hash, outputBuf);
+   if (!video_frame) {
+     CLOG_ERROR("can't get a videoframe from key %p", outputBuf);
+@@ -798,6 +808,13 @@ gst_spacemitsrc_create (GstPushSrc * psrc, GstBuffer ** buf)
+     return GST_FLOW_ERROR;
+   }
+ 
++  if (src->had_drop_frames < src->need_drop_frames) {
++    gst_release_cam_buffer(outputBuf, video_frame->index);
++    src->had_drop_frames++;
++    GST_DEBUG_OBJECT (src, "push frame %d back to cpp, residue %d", video_frame->index, src->need_drop_frames - src->had_drop_frames);
++    goto try_again;
++  }
++
+   GstBuffer *newbuf;
+ 
+   if (!src->close_dmabuf) {
+diff --git a/ext/spacemit/spacemitsrc/gstspacemitsrc.h b/ext/spacemit/spacemitsrc/gstspacemitsrc.h
+index 00410da..c3cabfa 100644
+--- a/ext/spacemit/spacemitsrc/gstspacemitsrc.h
++++ b/ext/spacemit/spacemitsrc/gstspacemitsrc.h
+@@ -58,7 +58,8 @@ struct _GstSpacemitSrc
+   gint device_index;
+   guint num_capture_buffers;
+   gint timeout;
+-  guint exposure;
++  guint need_drop_frames;
++  guint had_drop_frames;
+   gdouble gain;
+   gint offset;
+   gint format;
+-- 
+2.34.1
+
