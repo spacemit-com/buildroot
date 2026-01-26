@@ -1,0 +1,167 @@
+From 071e75eb9fe902a8c6d9e59a9a6c8239dd8c4193 Mon Sep 17 00:00:00 2001
+From: liuyingjie <yingjie.liu@spacemit.com>
+Date: Mon, 26 Jan 2026 10:29:09 +0800
+Subject: [PATCH 1/1] Add support for bottom application name and layer in
+ desktop shell
+
+---
+ desktop-shell/shell.c | 57 +++++++++++++++++++++++++++++++++++++++++--
+ desktop-shell/shell.h |  2 ++
+ 2 files changed, 57 insertions(+), 2 deletions(-)
+
+diff --git a/desktop-shell/shell.c b/desktop-shell/shell.c
+index 88f646a..40ef80c 100644
+--- a/desktop-shell/shell.c
++++ b/desktop-shell/shell.c
+@@ -531,6 +531,9 @@ shell_configuration(struct desktop_shell *shell)
+ 	weston_config_section_get_string(section, "top-app-name", &s, NULL);
+ 	shell->top_app_name = s;
+ 
++	weston_config_section_get_string(section, "bottom-app-name", &s, NULL);
++	shell->bottom_app_name = s;
++
+ 	/* Load window placement rules */
+ 	shell->window_placement_rules.count = 0;
+ 	shell->window_placement_rules.app_ids = NULL;
+@@ -2016,9 +2019,8 @@ shell_surface_is_always_on_top(struct shell_surface *shsurf)
+ 
+ 	if (top_app_name[len - 1] == '*') {
+ 		top_app_name[len - 1] = '\0';
+-		if (strstr(app_name, top_app_name) != app_name)
++		if (strncmp(app_name, top_app_name, len - 1) != 0)
+ 			return false;
+-
+ 	} else {
+ 		if (strcmp(app_name, shell->top_app_name) != 0)
+ 			return false;
+@@ -2029,6 +2031,40 @@ shell_surface_is_always_on_top(struct shell_surface *shsurf)
+ 	return true;
+ }
+ 
++/* Return true if the app name of surface is equal to shell->bottom_app_name. */
++static bool
++shell_surface_is_always_on_bottom(struct shell_surface *shsurf)
++{
++	struct desktop_shell *shell;
++	char app_name[APP_NAME_SIZE];
++	char bottom_app_name[APP_NAME_SIZE];
++	int len;
++
++	shell = shell_surface_get_shell(shsurf);
++	if (!shell->bottom_app_name)
++		return false;
++
++	if (!shell_surface_get_app_name(shsurf, app_name, APP_NAME_SIZE))
++		return false;
++
++	len = strlen(shell->bottom_app_name);
++	if (len < 1)
++		return false;
++
++	strcpy(bottom_app_name, shell->bottom_app_name);
++
++	if (bottom_app_name[len - 1] == '*') {
++		bottom_app_name[len - 1] = '\0';
++		if (strncmp(app_name, bottom_app_name, len - 1) != 0)
++			return false;
++	} else {
++		if (strcmp(app_name, shell->bottom_app_name) != 0)
++			return false;
++	}
++
++	return true;
++}
++
+ /* The surface will be inserted into the list immediately after the link
+  * returned by this function (i.e. will be stacked immediately above the
+  * returned link). */
+@@ -2045,6 +2081,12 @@ shell_surface_calculate_layer_link (struct shell_surface *shsurf)
+ 		return &shsurf->shell->fullscreen_layer.view_list;
+ 	}
+ 
++	/* If this surface is marked as always-on-bottom, place it in the bottom_ui_layer
++	 * which is above background but below normal applications */
++	if (shell_surface_is_always_on_bottom(shsurf)) {
++		return &shsurf->shell->bottom_ui_layer.view_list;
++	}
++
+ 	/* Move the surface to a normal workspace layer so that surfaces
+ 	 * which were previously fullscreen or transient are no longer
+ 	 * rendered on top. */
+@@ -2170,6 +2212,9 @@ unset_fullscreen(struct shell_surface *shsurf)
+ 		               &shsurf->rotation.transform.link);
+ 		shsurf->saved_rotation_valid = false;
+ 	}
++
++	/* Update layer to restore correct stacking order (e.g., bottom apps) */
++	shell_surface_update_layer(shsurf);
+ }
+ 
+ static void
+@@ -2193,6 +2238,9 @@ unset_maximized(struct shell_surface *shsurf)
+ 			       &shsurf->rotation.transform.link);
+ 		shsurf->saved_rotation_valid = false;
+ 	}
++
++	/* Update layer to restore correct stacking order (e.g., bottom apps) */
++	shell_surface_update_layer(shsurf);
+ }
+ 
+ static void
+@@ -5263,6 +5311,7 @@ shell_destroy(struct wl_listener *listener, void *data)
+ 
+ 	desktop_shell_destroy_layer(&shell->panel_layer);
+ 	desktop_shell_destroy_layer(&shell->background_layer);
++	desktop_shell_destroy_layer(&shell->bottom_ui_layer);
+ 	desktop_shell_destroy_layer(&shell->lock_layer);
+ 	desktop_shell_destroy_layer(&shell->input_panel_layer);
+ 	desktop_shell_destroy_layer(&shell->minimized_layer);
+@@ -5270,6 +5319,7 @@ shell_destroy(struct wl_listener *listener, void *data)
+ 
+ 	free(shell->client);
+ 	free(shell->top_app_name);
++	free(shell->bottom_app_name);
+ 	free(shell);
+ }
+ 
+@@ -5415,6 +5465,7 @@ wet_shell_init(struct weston_compositor *ec,
+ 	weston_layer_init(&shell->fullscreen_layer, ec);
+ 	weston_layer_init(&shell->panel_layer, ec);
+ 	weston_layer_init(&shell->background_layer, ec);
++	weston_layer_init(&shell->bottom_ui_layer, ec);
+ 	weston_layer_init(&shell->lock_layer, ec);
+ 	weston_layer_init(&shell->input_panel_layer, ec);
+ 
+@@ -5424,6 +5475,8 @@ wet_shell_init(struct weston_compositor *ec,
+ 				  WESTON_LAYER_POSITION_UI);
+ 	weston_layer_set_position(&shell->background_layer,
+ 				  WESTON_LAYER_POSITION_BACKGROUND);
++	weston_layer_set_position(&shell->bottom_ui_layer,
++				  WESTON_LAYER_POSITION_BOTTOM_UI);
+ 
+ 	wl_array_init(&shell->workspaces.array);
+ 	wl_list_init(&shell->workspaces.client_list);
+diff --git a/desktop-shell/shell.h b/desktop-shell/shell.h
+index d80c40f..bb1f716 100644
+--- a/desktop-shell/shell.h
++++ b/desktop-shell/shell.h
+@@ -146,6 +146,7 @@ struct desktop_shell {
+ 	struct weston_layer fullscreen_layer;
+ 	struct weston_layer panel_layer;
+ 	struct weston_layer background_layer;
++	struct weston_layer bottom_ui_layer;
+ 	struct weston_layer lock_layer;
+ 	struct weston_layer input_panel_layer;
+ 
+@@ -218,6 +219,7 @@ struct desktop_shell {
+ 
+ 	char *client;
+ 	char *top_app_name;
++	char *bottom_app_name;
+ 
+ 	struct timespec startup_time;
+ 
+-- 
+2.49.0.windows.1
+
+
