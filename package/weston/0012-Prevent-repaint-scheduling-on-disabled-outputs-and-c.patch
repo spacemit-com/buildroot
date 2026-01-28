@@ -1,0 +1,44 @@
+From 86df6a28f0efafc382e290ccef13742ba2978c4f Mon Sep 17 00:00:00 2001
+From: liuyingjie <yingjie.liu@spacemit.com>
+Date: Wed, 21 Jan 2026 16:18:03 +0800
+Subject: [PATCH 1/1] Prevent repaint scheduling on disabled outputs and clear
+ pending repaint state on output removal
+
+---
+ libweston/compositor.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/libweston/compositor.c b/libweston/compositor.c
+index f87eb37..83146f6 100644
+--- a/libweston/compositor.c
++++ b/libweston/compositor.c
+@@ -3390,6 +3390,10 @@ weston_output_schedule_repaint(struct weston_output *output)
+ 	    compositor->state == WESTON_COMPOSITOR_OFFSCREEN)
+ 		return;
+
++	/* Do not schedule repaint on a disabled output */
++	if (!output->enabled)
++		return;
++
+ 	if (!output->repaint_needed)
+ 		TL_POINT(compositor, "core_repaint_req", TLP_OUTPUT(output), TLP_END);
+
+@@ -6385,6 +6389,14 @@ weston_compositor_remove_output(struct weston_output *output)
+
+ 	weston_presentation_feedback_discard_list(&output->feedback_list);
+
++	/* Clear any pending repaint state */
++	if (output->idle_repaint_source) {
++		wl_event_source_remove(output->idle_repaint_source);
++		output->idle_repaint_source = NULL;
++	}
++	output->repaint_status = REPAINT_NOT_SCHEDULED;
++	output->repaint_needed = false;
++
+ 	weston_compositor_reflow_outputs(compositor, output, -output->width);
+
+ 	wl_list_remove(&output->link);
+--
+2.49.0.windows.1
+
+

@@ -1,0 +1,232 @@
+From cb2fb9943f3f588134d9b3f9e54b3dfddde184c0 Mon Sep 17 00:00:00 2001
+From: lizhirong <zhirong.li@spacemit.com>
+Date: Mon, 7 Apr 2025 16:24:35 +0800
+Subject: [PATCH 08/12] spacemitsrc: capture suspend signal and eos exit
+
+---
+ ext/spacemit/spacemitsrc/gstspacemitsrc.c | 113 ++++++++++++++++++++--
+ ext/spacemit/spacemitsrc/gstspacemitsrc.h |   2 +
+ ext/spacemit/spacemitsrc/meson.build      |   4 +-
+ 4 files changed, 113 insertions(+), 10 deletions(-)
+
+diff --git a/ext/spacemit/spacemitsrc/gstspacemitsrc.c b/ext/spacemit/spacemitsrc/gstspacemitsrc.c
+index 87fbf57..b6faf96 100644
+--- a/ext/spacemit/spacemitsrc/gstspacemitsrc.c
++++ b/ext/spacemit/spacemitsrc/gstspacemitsrc.c
+@@ -38,6 +38,8 @@
+ #include <gst/base/gstpushsrc.h>
+ #include <gst/video/video.h>
+ #include "gstspacemitsrc.h"
++#include <dbus/dbus.h>
++#include <dbus/dbus-glib.h>
+ 
+ GST_DEBUG_CATEGORY_STATIC (gst_spacemitsrc_debug);
+ #define GST_CAT_DEFAULT gst_spacemitsrc_debug
+@@ -127,6 +129,63 @@ gst_spacemitsrc_driver_unref ()
+     //SPACEMIT_ReleaseDriver ();
+   }
+ }
++static DBusConnection* connection = NULL;
++static DBusError error;
++static GMainLoop *loop;
++
++DBusHandlerResult unlock_signal_handler(DBusConnection *connection,
++                                       DBusMessage *message,
++                                       void *user_data) {
++  GstSpacemitSrc *src = (GstSpacemitSrc *)user_data;
++
++  if (dbus_message_is_signal(message,
++                            "org.freedesktop.login1.Session",
++                            "Unlock")) {
++      GST_DEBUG_OBJECT(src, "Session unlocked!");
++      return DBUS_HANDLER_RESULT_HANDLED;
++  }
++  return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
++}
++
++DBusHandlerResult prepare_for_sleep_handler(DBusConnection *connection,
++                                           DBusMessage *message,
++                                           void *user_data) {
++  GstSpacemitSrc *src = (GstSpacemitSrc *)user_data;
++
++  if (dbus_message_is_signal(message,
++                            "org.freedesktop.login1.Manager",
++                            "PrepareForSleep")) {
++    DBusError error;
++    dbus_error_init(&error);
++
++    dbus_bool_t sleeping;
++    if (dbus_message_get_args(message, &error,
++                              DBUS_TYPE_BOOLEAN, &sleeping,
++                              DBUS_TYPE_INVALID)) {
++      time_t now;
++      struct tm *timeinfo;
++      char buffer[80];
++      int i;
++
++      time(&now);
++      timeinfo = localtime(&now);
++      strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
++
++      if (sleeping) {
++          GST_DEBUG_OBJECT(src, "%s sleeping: True, signal received\n", buffer);
++          src->sleeping = true;
++          g_usleep(10000);
++          GST_DEBUG_OBJECT(src, "blocking 10ms finish, eos %d\n", src->eos);
++      } else {
++          // printf("System is waking up.\n");
++      }
++    }
++
++    dbus_error_free(&error);
++    return DBUS_HANDLER_RESULT_HANDLED;
++  }
++  return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
++}
+ 
+ static void
+ gst_spacemitsrc_class_init (GstSpacemitSrcClass * klass)
+@@ -251,14 +310,6 @@ gst_spacemitsrc_reset (GstSpacemitSrc * src)
+     gst_caps_unref (src->caps);
+     src->caps = NULL;
+   }
+-
+-  if (src->queue) {
+-    // TODO: remove dangling buffers
+-    g_async_queue_unref (src->queue);
+-  }
+-  src->queue = g_async_queue_new ();
+-  g_async_queue_ref (src->queue);
+-  GST_DEBUG_OBJECT (src, "new queue %p", src->queue);
+ }
+ 
+ static void
+@@ -284,9 +335,43 @@ gst_spacemitsrc_init (GstSpacemitSrc * src)
+   src->queue = NULL;
+   src->pushed_frame = 0;
+   g_mutex_init (&src->mutex);
++  src->sleeping = false;
++  src->eos = false;
+ 
+   frame_hash = g_hash_table_new (g_direct_hash, g_direct_equal);
+   gst_spacemitsrc_reset (src);
++  if (src->queue) {
++    // TODO: remove dangling buffers
++    g_async_queue_unref (src->queue);
++  }
++  src->queue = g_async_queue_new ();
++  g_async_queue_ref (src->queue);
++  GST_DEBUG_OBJECT (src, "new queue %p", src->queue);
++
++  dbus_error_init(&error);
++  connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
++  if (dbus_error_is_set(&error)) {
++      GST_ERROR_OBJECT (src, "Connection Error: %s", error.message);
++      dbus_error_free(&error);
++  }
++
++  dbus_bus_add_match(connection,
++                    "type='signal',"
++                    "interface='org.freedesktop.login1.Session',"
++                    "path='/org/freedesktop/login1/session/_33',"
++                    "member='Unlock'",
++                    &error);
++  dbus_connection_add_filter(connection, unlock_signal_handler, src, NULL);
++
++  dbus_bus_add_match(connection,
++                    "type='signal',"
++                    "interface='org.freedesktop.login1.Manager',"
++                    "path='/org/freedesktop/login1',"
++                    "member='PrepareForSleep'",
++                    &error);
++  dbus_connection_add_filter(connection, prepare_for_sleep_handler, src, NULL);
++
++  dbus_connection_setup_with_g_main(connection, NULL);
+ }
+ 
+ 
+@@ -476,6 +561,7 @@ gst_spacemitsrc_finalize (GObject * object)
+   }
+ 
+   gst_spacemitsrc_driver_unref ();
++  dbus_connection_unref(connection);
+ 
+   G_OBJECT_CLASS (gst_spacemitsrc_parent_class)->finalize (object);
+ }
+@@ -638,6 +724,7 @@ gst_spacemitsrc_start (GstBaseSrc * bsrc)
+     /* error already sent */
+     return FALSE;
+   }
++
+   GST_DEBUG_OBJECT (src, "finish start");
+   return TRUE;
+ }
+@@ -656,6 +743,7 @@ gst_spacemitsrc_stop (GstBaseSrc * bsrc)
+   gst_setup_camera_stop (&src->para);
+   GST_DEBUG_OBJECT (src, "sensor stream off");
+   gst_spacemitsrc_reset (src);
++  src->eos = true;
+ 
+   return TRUE;
+ }
+@@ -790,7 +878,10 @@ gst_spacemitsrc_create (GstPushSrc * psrc, GstBuffer ** buf)
+   IMAGE_BUFFER_S* outputBuf;
+   guint64 timeout = 1 * 100 * 1000 * 1000;//100秒
+ 
+-  GST_DEBUG_OBJECT (src, "create");
++  GST_DEBUG_OBJECT (src, "create, sleep %d", src->sleeping);
++  if (src->sleeping)
++    goto out;
++
+ try_again:
+   //wait queue and get cpp output buffer
+   outputBuf = (IMAGE_BUFFER_S *) g_async_queue_timeout_pop (src->queue, (guint64) timeout);
+@@ -854,6 +945,10 @@ try_again:
+   GST_DEBUG_OBJECT (src, "gst buffer %p new in create, mem fd: %d, buffer:%p, pushed frame: %u", *buf, video_frame->fd, outputBuf, src->pushed_frame);
+   g_mutex_unlock(&src->mutex);
+ 
++out:
++  if (src->sleeping)
++    return GST_FLOW_EOS;
++
+   return GST_FLOW_OK;
+ }
+ 
+diff --git a/ext/spacemit/spacemitsrc/gstspacemitsrc.h b/ext/spacemit/spacemitsrc/gstspacemitsrc.h
+index c3cabfa..1260433 100644
+--- a/ext/spacemit/spacemitsrc/gstspacemitsrc.h
++++ b/ext/spacemit/spacemitsrc/gstspacemitsrc.h
+@@ -89,6 +89,8 @@ struct _GstSpacemitSrc
+   gint pipelineId;
+   gint firmwareId;
+   void* sensorHandle;
++  gint sleeping;
++  gint eos;
+ };
+ 
+ struct _GstSpacemitSrcClass
+diff --git a/ext/spacemit/spacemitsrc/meson.build b/ext/spacemit/spacemitsrc/meson.build
+index 2c7cf55..95283f7 100644
+--- a/ext/spacemit/spacemitsrc/meson.build
++++ b/ext/spacemit/spacemitsrc/meson.build
+@@ -4,6 +4,8 @@ spacemitsrc_sources = [
+ ]
+ 
+ spacemitcam_dep = dependency('k1x-cam', version : '>= 0.0.0', required : get_option('spacemitsrc'))
++dbus_glib_dep = dependency('dbus-glib-1')
++dbus_dev_dep = dependency('dbus-1')
+ 
+ if spacemitcam_dep.found()
+ 	gstspacemitsrc = library('gstspacemitsrc',
+@@ -11,7 +13,7 @@ if spacemitcam_dep.found()
+ 		c_args : gst_plugins_bad_args,
+ 		link_args : noseh_link_args,
+ 		include_directories : [configinc],
+-		dependencies : [gstvideo_dep, spacemitcam_dep, gstallocators_dep, gstbase_dep],
++		dependencies : [gstvideo_dep, spacemitcam_dep, gstallocators_dep, gstbase_dep, dbus_glib_dep, dbus_dev_dep],
+ 		install : true,
+ 		install_dir : plugins_install_dir,
+ 	)
+-- 
+2.34.1
+

@@ -1,0 +1,169 @@
+From 834d24cef34e4432185f0b389fb7fe0db34a4f65 Mon Sep 17 00:00:00 2001
+From: wumingjie <mingjie.wu@spacemit.com>
+Date: Fri, 5 Dec 2025 18:01:28 +0800
+Subject: [PATCH 11/12] release frame
+
+---
+ ext/spacemit/spacemitcodec/gstspacemitenc.c | 62 ++++++++++++++++++---
+ ext/spacemit/spacemitcodec/gstspacemitenc.h |  2 +
+ 2 files changed, 57 insertions(+), 7 deletions(-)
+
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitenc.c b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+index 6408f71..adccee2 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitenc.c
++++ b/ext/spacemit/spacemitcodec/gstspacemitenc.c
+@@ -14,6 +14,8 @@
+ #define PACKET_SIZE (2 * 1024 * 1024)
+ #define MPP_ENCODER_FRAME_MAX 12
+ 
++#define GST_FLOW_DROP_FRAME   GST_FLOW_CUSTOM_ERROR
++
+ GST_DEBUG_CATEGORY_STATIC (gst_spacemitenc_debug_category);
+ #define GST_CAT_DEFAULT gst_spacemitenc_debug_category
+ 
+@@ -258,6 +260,11 @@ gst_spacemitenc_init (GstSpacemitEnc * thiz)
+   thiz->mppframe = NULL;
+   thiz->mpppacket = NULL;
+   thiz->mpppacket_pner = NULL;
++
++  g_queue_init (&thiz->id_queue);
++  for (guint i = 0; i < MPP_ENCODER_FRAME_MAX; i++) {
++    g_queue_push_head (&thiz->id_queue, GINT_TO_POINTER(i+1));
++  }
+ }
+ 
+ void
+@@ -431,6 +438,8 @@ gst_spacemitenc_finalize (GObject * object)
+ 
+   GST_DEBUG_OBJECT (thiz, "finalize");
+ 
++  g_queue_clear(&thiz->id_queue);
++
+   /* clean up object here */
+   if (thiz->input_state)
+     gst_video_codec_state_unref (thiz->input_state);
+@@ -540,6 +549,8 @@ gint try_to_release_upstream_buffer (GstSpacemitEnc * thiz, gint *mppframe_id)
+         ret = FALSE;
+         GST_ERROR_OBJECT (thiz, "fail to release upstream buf, id:%d", id);
+       }
++    } else {
++      ret = FALSE;
+     }
+   } while (id != -1);
+ 
+@@ -600,6 +611,8 @@ static gint32 gst_spacemitenc_request_packet (GstSpacemitEnc *thiz, gint *msize,
+   gint32 ret;
+   guint count = 0;
+   MppPacket *mpppacket;
++  gint mppframe_id = -1;
++  gint32 release_ret;
+ 
+   mpppacket = thiz->mpppacket;
+   do {
+@@ -636,6 +649,14 @@ static gint32 gst_spacemitenc_request_packet (GstSpacemitEnc *thiz, gint *msize,
+   }
+ 
+   *msize = PACKET_GetLength(mpppacket);
++  release_ret = try_to_release_upstream_buffer(thiz, &mppframe_id);
++  if (release_ret == FALSE || mppframe_id < 0) {
++    GST_ERROR_OBJECT (thiz, "release buffer failed");
++  } else {
++    GST_OBJECT_LOCK (thiz);
++    g_queue_push_head(&thiz->id_queue, GINT_TO_POINTER(mppframe_id+1));
++    GST_OBJECT_UNLOCK (thiz);
++  }
+ 
+   if (thiz->eCodingType == CODING_VP8 || thiz->eCodingType == CODING_VP9) {
+     mpppacket = thiz->mpppacket_pner;
+@@ -662,6 +683,12 @@ static gint32 gst_spacemitenc_request_packet (GstSpacemitEnc *thiz, gint *msize,
+     } while (1);
+ 
+     *mpsize = PACKET_GetLength(mpppacket);
++    release_ret = try_to_release_upstream_buffer(thiz, &mppframe_id);
++    if (release_ret == FALSE || mppframe_id < 0) {
++      GST_ERROR_OBJECT (thiz, "release buffer failed");
++    } else {
++      g_queue_push_head(&thiz->id_queue, GINT_TO_POINTER(mppframe_id+1));
++    }
+   } else {
+     *mpsize = 0;
+   }
+@@ -1033,14 +1060,35 @@ static GstFlowReturn gst_spacemitenc_encode_one_frame (GstVideoEncoder * encoder
+   gint32 mppframe_id;
+   GstMemory *mem = NULL;
+   gint fd = -1;
++  gpointer data = NULL;
++  gint try_count = 0;
+ 
+   if (frame) {
+     GST_DEBUG_OBJECT (thiz, "handle a frame %p, snb:%u, input buffer pts: %"  GST_TIME_FORMAT ", dts %" GST_TIME_FORMAT,
+         frame, frame->system_frame_number, GST_TIME_ARGS (GST_BUFFER_PTS (frame->input_buffer)),
+         GST_TIME_ARGS (GST_BUFFER_DTS (frame->input_buffer)));
+ 
++    while (1) {
++      GST_OBJECT_LOCK (thiz);
++      data = g_queue_pop_tail(&thiz->id_queue);
++      GST_OBJECT_UNLOCK (thiz);
++      if (data == NULL) {
++        usleep(1000);
++        try_count++;
++        if (try_count >= 500) {
++          GST_WARNING_OBJECT (thiz, "no free mpp frame id, drop frame, maybe no sink or sink is very slow");
++          flow_ret = GST_FLOW_DROP_FRAME;
++          goto done;
++        }
++        continue;
++      } else {
++        try_count = 0;
++        break;
++      }
++    }
++
++    mppframe_id = (gint32)data - 1;
+     mppframe = FRAME_Create();
+-    mppframe_id = thiz->frame_count % MPP_ENCODER_FRAME_MAX;
+     FRAME_SetID(mppframe, mppframe_id);
+     gst_mini_object_weak_ref(GST_MINI_OBJECT(frame->input_buffer),
+                             (GstMiniObjectNotify) gstbuffer_disposed,
+@@ -1081,12 +1129,6 @@ static GstFlowReturn gst_spacemitenc_encode_one_frame (GstVideoEncoder * encoder
+     FRAME_SetEos(mppframe, FRAME_NO_EOS);
+     FRAME_SetPts(mppframe, GST_BUFFER_PTS (frame->input_buffer));
+     thiz->frame_count++;
+-
+-    ret = try_to_release_upstream_buffer(thiz, &mppframe_id);
+-    if (ret == FALSE) {
+-      flow_ret = GST_FLOW_ERROR;
+-      goto done;
+-    }
+   } else {
+     GST_DEBUG_OBJECT (thiz, "null frame enc, need eos");
+     FRAME_SetEos(thiz->mppframe, FRAME_EOS_WITHOUT_DATA);
+@@ -1138,6 +1180,12 @@ gst_spacemitenc_handle_frame (GstVideoEncoder * encoder,
+   GST_VIDEO_ENCODER_STREAM_UNLOCK (encoder);
+   flow_ret = gst_spacemitenc_encode_one_frame (encoder, frame);
+   GST_VIDEO_ENCODER_STREAM_LOCK (encoder);
++
++  if (flow_ret == GST_FLOW_DROP_FRAME) {
++    flow_ret = GST_FLOW_OK;
++    goto done;
++  }
++
+   if (flow_ret != GST_FLOW_OK)
+     goto done;
+ 
+diff --git a/ext/spacemit/spacemitcodec/gstspacemitenc.h b/ext/spacemit/spacemitcodec/gstspacemitenc.h
+index 0df560f..1b854ae 100644
+--- a/ext/spacemit/spacemitcodec/gstspacemitenc.h
++++ b/ext/spacemit/spacemitcodec/gstspacemitenc.h
+@@ -103,6 +103,8 @@ struct _GstSpacemitEnc
+ 	MppPacket *mpppacket;
+ 	MppPacket *mpppacket_pner;
+ 	MppFrame *mppframe;
++
++	GQueue id_queue;
+ };
+ 
+ struct _GstSpacemitEncClass
+-- 
+2.34.1
+

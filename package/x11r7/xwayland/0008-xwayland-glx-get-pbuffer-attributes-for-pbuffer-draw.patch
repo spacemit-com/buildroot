@@ -1,0 +1,26 @@
+From b7155cfc0e977e62d50d40612d84af65ee2fe8df Mon Sep 17 00:00:00 2001
+From: Brendan King <Brendan.King@imgtec.com>
+Date: Mon, 17 Aug 2020 19:29:35 +0100
+Subject: [PATCH 8/9] xwayland/glx: get pbuffer attributes for pbuffer
+ drawables
+
+---
+ hw/xwayland/xwayland-glx.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/xwayland/xwayland-glx.c b/hw/xwayland/xwayland-glx.c
+index 4689b9ed6..159e1e2f4 100644
+--- a/hw/xwayland/xwayland-glx.c
++++ b/hw/xwayland/xwayland-glx.c
+@@ -214,7 +214,7 @@ translate_eglconfig(struct egl_screen *screen, EGLConfig hc,
+     GET(EGL_TRANSPARENT_BLUE_VALUE, transparentBlue);
+     GET(EGL_SAMPLE_BUFFERS, sampleBuffers);
+     GET(EGL_SAMPLES, samples);
+-    if (c->base.renderType & GLX_PBUFFER_BIT) {
++    if (c->base.drawableType & GLX_PBUFFER_BIT) {
+         GET(EGL_MAX_PBUFFER_WIDTH, maxPbufferWidth);
+         GET(EGL_MAX_PBUFFER_HEIGHT, maxPbufferHeight);
+         GET(EGL_MAX_PBUFFER_PIXELS, maxPbufferPixels);
+-- 
+2.34.1
+

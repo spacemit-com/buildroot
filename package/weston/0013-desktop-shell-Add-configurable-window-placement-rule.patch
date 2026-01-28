@@ -1,0 +1,124 @@
+From fcb57d931ff3866d0001f3ff0f296d42900c750a Mon Sep 17 00:00:00 2001
+From: liuyingjie <yingjie.liu@spacemit.com>
+Date: Wed, 21 Jan 2026 17:54:19 +0800
+Subject: [PATCH 1/1] desktop-shell: Add configurable window placement rules
+
+Add support for custom window placement rules configured via weston.ini.
+Applications matching specified app-ids will be:
+1. Positioned at the top-left corner of the work area on first display
+2. Automatically resized if their dimensions exceed the screen size
+
+Configuration example in weston.ini:
+  [window-placement]
+  app-id=ffplay
+
+This feature is useful for:
+- Video players with large resolution content
+- Applications requiring fixed initial positions
+- Embedded systems with limited screen space
+- Preventing windows from appearing partially off-screen
+
+The rules only apply to regular windows (non-fullscreen, non-maximized,
+non-Xwayland-positioned) during their initial mapping.
+---
+ desktop-shell/shell.c | 60 ++++++++++++++++++++++++++++++++++++++++++-
+ desktop-shell/shell.h |  5 ++++
+ 2 files changed, 64 insertions(+), 1 deletion(-)
+
+diff --git a/desktop-shell/shell.c b/desktop-shell/shell.c
+index 63e1431..f123456 100644
+--- a/desktop-shell/shell.c
++++ b/desktop-shell/shell.c
+@@ -528,6 +528,26 @@ shell_configuration(struct desktop_shell *shell)
+
+ 	weston_config_section_get_string(section, "top-app-name", &s, NULL);
+ 	shell->top_app_name = s;
++
++	/* Load window placement rules */
++	shell->window_placement_rules.count = 0;
++	shell->window_placement_rules.app_ids = NULL;
++
++	section = NULL;
++	while ((section = weston_config_get_section(wet_get_config(shell->compositor),
++						   "window-placement", section, NULL))) {
++		char *app_id = NULL;
++		weston_config_section_get_string(section, "app-id", &app_id, NULL);
++		if (app_id) {
++			shell->window_placement_rules.app_ids =
++				realloc(shell->window_placement_rules.app_ids,
++					(shell->window_placement_rules.count + 1) * sizeof(char *));
++			if (shell->window_placement_rules.app_ids) {
++				shell->window_placement_rules.app_ids[shell->window_placement_rules.count] = app_id;
++				shell->window_placement_rules.count++;
++			}
++		}
++	}
+ }
+
+ static int
+@@ -2635,7 +2655,45 @@ map(struct desktop_shell *shell, struct shell_surface *shsurf,
+ 	} else if (shsurf->xwayland.is_set) {
+ 		set_position_from_xwayland(shsurf);
+ 	} else {
+-		weston_view_set_initial_position(shsurf->view, shell);
++		/* Check if this app needs custom placement */
++		const char *app_id = weston_desktop_surface_get_app_id(shsurf->desktop_surface);
++		bool custom_placed = false;
++
++		if (app_id && shell->window_placement_rules.count > 0) {
++			int i;
++			for (i = 0; i < shell->window_placement_rules.count; i++) {
++				if (strcmp(app_id, shell->window_placement_rules.app_ids[i]) == 0) {
++					/* Place window at top-left corner */
++					int32_t x = 0;
++					int32_t y = 0;
++
++					/* Get screen dimensions */
++					if (shsurf->output) {
++						pixman_rectangle32_t area;
++						get_output_work_area(shell, shsurf->output, &area);
++
++						/* If window is larger than screen, resize it */
++						if (surface->width > area.width || surface->height > area.height) {
++							int32_t new_width = surface->width > area.width ? area.width : surface->width;
++							int32_t new_height = surface->height > area.height ? area.height : surface->height;
++							weston_desktop_surface_set_size(shsurf->desktop_surface,
++														new_width, new_height);
++						}
++
++						x = area.x;
++						y = area.y;
++					}
++
++					weston_view_set_position(shsurf->view, x, y);
++					custom_placed = true;
++					break;
++				}
++			}
++		}
++
++		if (!custom_placed) {
++			weston_view_set_initial_position(shsurf->view, shell);
++		}
+ 	}
+
+ 	/* Surface stacking order, see also activate(). */
+diff --git a/desktop-shell/shell.h b/desktop-shell/shell.h
+index b06b906..5203d7b 100644
+--- a/desktop-shell/shell.h
++++ b/desktop-shell/shell.h
+@@ -220,6 +220,11 @@ struct desktop_shell {
+ 	char *top_app_name;
+
+ 	struct timespec startup_time;
++
++	struct {
++		char **app_ids;
++		int count;
++	} window_placement_rules;
+ };
+
+ struct weston_output *
+--
+2.49.0.windows.1
+

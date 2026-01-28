@@ -1,0 +1,347 @@
+From 65b350f4eb1121adb85e716268b12c357662fb48 Mon Sep 17 00:00:00 2001
+From: liuyingjie <yingjie.liu@spacemit.com>
+Date: Thu, 22 Jan 2026 16:28:35 +0800
+Subject: [PATCH 1/1] Add hotplug handling for Wayland video output and
+ fullscreen modes
+
+---
+ src/video/SDL_video.c                   |   5 +
+ src/video/wayland/SDL_waylandopengles.c |  12 ++-
+ src/video/wayland/SDL_waylandvideo.c    |  28 ++++-
+ src/video/wayland/SDL_waylandwindow.c   | 138 +++++++++++++++++++++---
+ 4 files changed, 164 insertions(+), 19 deletions(-)
+
+diff --git a/src/video/SDL_video.c b/src/video/SDL_video.c
+index ac07ccb..e937fd8 100644
+--- a/src/video/SDL_video.c
++++ b/src/video/SDL_video.c
+@@ -1431,6 +1431,11 @@ SDL_UpdateFullscreenMode(SDL_Window * window, SDL_bool fullscreen)
+
+     display = SDL_GetDisplayForWindow(window);
+
++    /* If display was disconnected or not initialized, cannot update fullscreen mode */
++    if (!display || !display->driverdata) {
++        return SDL_SetError("Display not available");
++    }
++
+     if (fullscreen) {
+         /* Hide any other fullscreen windows */
+         if (display->fullscreen_window &&
+diff --git a/src/video/wayland/SDL_waylandopengles.c b/src/video/wayland/SDL_waylandopengles.c
+index b7215ed..9e11ba0 100644
+--- a/src/video/wayland/SDL_waylandopengles.c
++++ b/src/video/wayland/SDL_waylandopengles.c
+@@ -130,9 +130,16 @@ Wayland_GLES_SwapWindow(_THIS, SDL_Window *window)
+         SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
+         struct wl_display *display = videodata->display;
+         SDL_VideoDisplay *sdldisplay = SDL_GetDisplayForWindow(window);
++        Uint32 max_wait;
++
++        /* If display was disconnected (hotplug), skip swap interval wait */
++        if (sdldisplay == NULL) {
++            goto swap_buffers;
++        }
++
+         /* ~10 frames (or 1 sec), so we'll progress even if throttled to zero. */
+-        const Uint32 max_wait = SDL_GetTicks() + (sdldisplay->current_mode.refresh_rate ?
+-                                                  (10000 / sdldisplay->current_mode.refresh_rate) : 1000);
++        max_wait = SDL_GetTicks() + (sdldisplay->current_mode.refresh_rate ?
++                                     (10000 / sdldisplay->current_mode.refresh_rate) : 1000);
+         while (SDL_AtomicGet(&data->swap_interval_ready) == 0) {
+             Uint32 now;
+
+@@ -168,6 +175,7 @@ Wayland_GLES_SwapWindow(_THIS, SDL_Window *window)
+         SDL_AtomicSet(&data->swap_interval_ready, 0);
+     }
+
++swap_buffers:
+     /* Feed the frame to Wayland. This will set it so the wl_surface_frame callback can fire again. */
+     if (!_this->egl_data->eglSwapBuffers(_this->egl_data->egl_display, data->egl_surface)) {
+         return SDL_EGL_SetError("unable to show color buffer in an OS-native window", "eglSwapBuffers");
+diff --git a/src/video/wayland/SDL_waylandvideo.c b/src/video/wayland/SDL_waylandvideo.c
+index b91897f..5f3c995 100644
+--- a/src/video/wayland/SDL_waylandvideo.c
++++ b/src/video/wayland/SDL_waylandvideo.c
+@@ -1002,6 +1002,16 @@ static int
+ Wayland_GetDisplayBounds(_THIS, SDL_VideoDisplay *display, SDL_Rect *rect)
+ {
+     SDL_WaylandOutputData *driverdata = (SDL_WaylandOutputData *)display->driverdata;
++
++    /* Check if output was disconnected (hotplug) */
++    if (driverdata == NULL) {
++        rect->x = 0;
++        rect->y = 0;
++        rect->w = display->current_mode.w;
++        rect->h = display->current_mode.h;
++        return 0;
++    }
++
+     rect->x = driverdata->x;
+     rect->y = driverdata->y;
+     rect->w = display->current_mode.w;
+@@ -1013,6 +1023,22 @@ static int
+ Wayland_GetDisplayDPI(_THIS, SDL_VideoDisplay * sdl_display, float * ddpi, float * hdpi, float * vdpi)
+ {
+     SDL_WaylandOutputData *driverdata = (SDL_WaylandOutputData *)sdl_display->driverdata;
++    const float default_dpi = 96.0f; /* Standard DPI fallback */
++
++    /* Check if output was disconnected (hotplug) or DPI not initialized yet */
++    if (driverdata == NULL || driverdata->ddpi == 0.0f) {
++        if (ddpi) {
++            *ddpi = default_dpi;
++        }
++        if (hdpi) {
++            *hdpi = default_dpi;
++        }
++        if (vdpi) {
++            *vdpi = default_dpi;
++        }
++        /* Return success with default DPI instead of error during hotplug */
++        return 0;
++    }
+
+     if (ddpi) {
+         *ddpi = driverdata->ddpi;
+@@ -1024,7 +1050,7 @@ Wayland_GetDisplayDPI(_THIS, SDL_VideoDisplay * sdl_display, float * ddpi, float
+         *vdpi = driverdata->vdpi;
+     }
+
+-    return driverdata->ddpi != 0.0f ? 0 : SDL_SetError("Couldn't get DPI");
++    return 0;
+ }
+
+ static void
+diff --git a/src/video/wayland/SDL_waylandwindow.c b/src/video/wayland/SDL_waylandwindow.c
+index 5927967..21a544c 100644
+--- a/src/video/wayland/SDL_waylandwindow.c
++++ b/src/video/wayland/SDL_waylandwindow.c
+@@ -60,12 +60,24 @@ static void
+ GetFullScreenDimensions(SDL_Window *window, int *width, int *height, int *drawable_width, int *drawable_height)
+ {
+     SDL_WindowData *wind = (SDL_WindowData *) window->driverdata;
+-    SDL_WaylandOutputData *output = (SDL_WaylandOutputData *) SDL_GetDisplayForWindow(window)->driverdata;
+-
++    SDL_VideoDisplay *display = SDL_GetDisplayForWindow(window);
++    SDL_WaylandOutputData *output = display ? (SDL_WaylandOutputData *) display->driverdata : NULL;
+     int fs_width, fs_height;
+     int buf_width, buf_height;
+-    const int output_width = wind->fs_output_width ? wind->fs_output_width : output->width;
+-    const int output_height = wind->fs_output_height ? wind->fs_output_height : output->height;
++    int output_width;
++    int output_height;
++
++    /* If output was disconnected (hotplug), use fallback dimensions */
++    if (output == NULL) {
++        if (width) *width = window->w;
++        if (height) *height = window->h;
++        if (drawable_width) *drawable_width = window->w;
++        if (drawable_height) *drawable_height = window->h;
++        return;
++    }
++
++    output_width = wind->fs_output_width ? wind->fs_output_width : output->width;
++    output_height = wind->fs_output_height ? wind->fs_output_height : output->height;
+
+     /*
+      * Fullscreen desktop mandates a desktop sized window, so that's what applications will get.
+@@ -137,9 +149,15 @@ NeedViewport(SDL_Window *window)
+ {
+     SDL_WindowData        *wind   = window->driverdata;
+     SDL_VideoData         *video  = wind->waylandData;
+-    SDL_WaylandOutputData *output = ((SDL_WaylandOutputData *)SDL_GetDisplayForWindow(window)->driverdata);
++    SDL_VideoDisplay      *display = SDL_GetDisplayForWindow(window);
++    SDL_WaylandOutputData *output = display ? ((SDL_WaylandOutputData *)display->driverdata) : NULL;
+     int                    fs_width, fs_height;
+
++    /* If output was disconnected (hotplug), no viewport needed */
++    if (output == NULL) {
++        return SDL_FALSE;
++    }
++
+     /*
+      * A viewport is only required when scaling is enabled and:
+      *  - A fullscreen mode is being emulated and the mode does not match the logical desktop dimensions.
+@@ -163,10 +181,15 @@ static void
+ GetBufferSize(SDL_Window *window, int *width, int *height)
+ {
+     SDL_WindowData *data = window->driverdata;
++    SDL_VideoDisplay *display = SDL_GetDisplayForWindow(window);
+     int             buf_width;
+     int             buf_height;
+
+-    if (FullscreenModeEmulation(window)) {
++    /* If display is disconnected during this call, use safe fallback */
++    if (display == NULL || display->driverdata == NULL) {
++        buf_width = window->w;
++        buf_height = window->h;
++    } else if (FullscreenModeEmulation(window)) {
+         GetFullScreenDimensions(window, NULL, NULL, &buf_width, &buf_height);
+     } else if (NeedViewport(window)) {
+         /* Round fractional backbuffer sizes halfway away from zero. */
+@@ -225,13 +248,29 @@ ConfigureWindowGeometry(SDL_Window *window)
+ {
+     SDL_WindowData        *data    = window->driverdata;
+     SDL_VideoData         *viddata = data->waylandData;
+-    SDL_WaylandOutputData *output  = (SDL_WaylandOutputData *)SDL_GetDisplayForWindow(window)->driverdata;
++    SDL_VideoDisplay      *display = SDL_GetDisplayForWindow(window);
++    SDL_WaylandOutputData *output  = display ? (SDL_WaylandOutputData *)display->driverdata : NULL;
+     struct wl_region      *region;
+     const int              old_dw = data->drawable_width;
+     const int              old_dh = data->drawable_height;
+     SDL_bool               window_size_changed;
+     SDL_bool               drawable_size_changed;
+
++    /* If output was disconnected (hotplug), skip all output-dependent configuration */
++    if (output == NULL) {
++        /* For non-fullscreen windows or when output is unavailable,
++         * still update EGL surface with current window dimensions */
++        if (data->egl_window && (data->drawable_width != window->w || data->drawable_height != window->h)) {
++            data->drawable_width = window->w;
++            data->drawable_height = window->h;
++            WAYLAND_wl_egl_window_resize(data->egl_window,
++                                         data->drawable_width,
++                                         data->drawable_height,
++                                         0, 0);
++        }
++        return;
++    }
++
+     /* Set the drawable backbuffer size. */
+     GetBufferSize(window, &data->drawable_width, &data->drawable_height);
+     drawable_size_changed = data->drawable_width != old_dw || data->drawable_height != old_dh;
+@@ -565,7 +604,8 @@ handle_configure_xdg_toplevel(void *data,
+ {
+     SDL_WindowData *wind = (SDL_WindowData *)data;
+     SDL_Window *window = wind->sdlwindow;
+-    SDL_WaylandOutputData *driverdata;
++    SDL_VideoDisplay *display = SDL_GetDisplayForWindow(window);
++    SDL_WaylandOutputData *driverdata = display ? (SDL_WaylandOutputData *) display->driverdata : NULL;
+
+     enum xdg_toplevel_state *state;
+     SDL_bool fullscreen = SDL_FALSE;
+@@ -592,10 +632,39 @@ handle_configure_xdg_toplevel(void *data,
+         }
+     }
+
+-    driverdata = (SDL_WaylandOutputData *) SDL_GetDisplayForWindow(window)->driverdata;
+-
+     UpdateWindowFullscreen(window, fullscreen);
+
++    /* If output was disconnected (hotplug), skip output-dependent logic */
++    if (driverdata == NULL) {
++        if (!fullscreen && width != 0 && height != 0) {
++            /* Still handle window resize and state updates */
++            SDL_SendWindowEvent(window,
++                                maximized ?
++                                    SDL_WINDOWEVENT_MAXIMIZED :
++                                    SDL_WINDOWEVENT_RESTORED,
++                                0, 0);
++
++            if ((window->flags & SDL_WINDOW_RESIZABLE)) {
++                if (window->max_w > 0) {
++                    width = SDL_min(width, window->max_w);
++                }
++                width = SDL_max(width, window->min_w);
++                if (window->max_h > 0) {
++                    height = SDL_min(height, window->max_h);
++                }
++                height = SDL_max(height, window->min_h);
++            }
++
++            if (window->w != width || window->h != height) {
++                window->w = width;
++                window->h = height;
++                wind->needs_resize_event = SDL_TRUE;
++            }
++            Wayland_HandleResize(window, width, height, wind->scale_factor);
++        }
++        return;
++    }
++
+     if (!fullscreen) {
+         if (width == 0 || height == 0) {
+             /* This usually happens when we're being restored from a
+@@ -793,7 +862,8 @@ decoration_frame_configure(struct libdecor_frame *frame,
+ {
+     SDL_WindowData *wind = (SDL_WindowData *)user_data;
+     SDL_Window *window = wind->sdlwindow;
+-    SDL_WaylandOutputData *driverdata;
++    SDL_VideoDisplay *display = SDL_GetDisplayForWindow(window);
++    SDL_WaylandOutputData *driverdata = display ? (SDL_WaylandOutputData *) display->driverdata : NULL;
+     struct libdecor_state *state;
+
+     enum libdecor_window_state window_state;
+@@ -820,10 +890,37 @@ decoration_frame_configure(struct libdecor_frame *frame,
+     }
+     floating = !(fullscreen || maximized || tiled);
+
+-    driverdata = (SDL_WaylandOutputData *) SDL_GetDisplayForWindow(window)->driverdata;
+-
+     UpdateWindowFullscreen(window, fullscreen);
+
++    /* Send window state events even if output is disconnected */
++    if (!fullscreen) {
++        SDL_SendWindowEvent(window,
++                            maximized ?
++                                SDL_WINDOWEVENT_MAXIMIZED :
++                                SDL_WINDOWEVENT_RESTORED,
++                            0, 0);
++    }
++
++    SDL_SendWindowEvent(window,
++                        focused ?
++                            SDL_WINDOWEVENT_FOCUS_GAINED :
++                            SDL_WINDOWEVENT_FOCUS_LOST,
++                        0, 0);
++
++    /* If output was disconnected (hotplug), use fallback scale and dimensions */
++    if (driverdata == NULL) {
++        if (libdecor_configuration_get_content_size(configuration, frame, &width, &height)) {
++            Wayland_HandleResize(window, width, height, scale_factor);
++        } else {
++            width = window->w;
++            height = window->h;
++        }
++        state = libdecor_state_new(width, height);
++        libdecor_frame_commit(frame, state, configuration);
++        libdecor_state_free(state);
++        return;
++    }
++
+     if (!fullscreen) {
+         /* Always send a maximized/restore event; if the event is redundant it will
+          * automatically be discarded (see src/events/SDL_windowevents.c)
+@@ -995,7 +1092,12 @@ update_scale_factor(SDL_WindowData *window)
+     if (FULLSCREEN_VISIBLE(window->sdlwindow)) {
+         /* For fullscreen, use the active display's scale factor */
+         SDL_VideoDisplay *display = SDL_GetDisplayForWindow(window->sdlwindow);
+-        SDL_WaylandOutputData* driverdata = display->driverdata;
++        SDL_WaylandOutputData* driverdata = display ? display->driverdata : NULL;
++
++        /* If display was disconnected (hotplug), keep the old factor */
++        if (driverdata == NULL) {
++            return;
++        }
+         new_factor = driverdata->scale_factor;
+     } else if (window->num_outputs == 0) {
+         /* No monitor (somehow)? Just fall back. */
+@@ -1986,8 +2088,12 @@ int Wayland_CreateWindow(_THIS, SDL_Window *window)
+     if (window->flags & SDL_WINDOW_ALLOW_HIGHDPI) {
+         int i;
+         for (i=0; i < SDL_GetVideoDevice()->num_displays; i++) {
+-            float scale = ((SDL_WaylandOutputData*)SDL_GetVideoDevice()->displays[i].driverdata)->scale_factor;
+-            data->scale_factor = SDL_max(data->scale_factor, scale);
++            SDL_WaylandOutputData *output_data = (SDL_WaylandOutputData*)SDL_GetVideoDevice()->displays[i].driverdata;
++            /* Check for NULL in case display was disconnected during initialization */
++            if (output_data != NULL) {
++                float scale = output_data->scale_factor;
++                data->scale_factor = SDL_max(data->scale_factor, scale);
++            }
+         }
+     }
+
+--
+2.49.0.windows.1
+
+
+
