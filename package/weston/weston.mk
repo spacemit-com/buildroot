@@ -20,7 +20,8 @@ WESTON_CONF_OPTS = \
 	-Dcolor-management-colord=false \
 	-Ddoc=false \
 	-Dremoting=false \
-	-Dtools=calibrator,debug,info,terminal,touch-calibrator
+	-Dtools=calibrator,debug,info,terminal,touch-calibrator \
+	-Dc_args="-Wno-incompatible-pointer-types"
 
 # Uses VIDIOC_EXPBUF, only available from 3.8+
 ifeq ($(BR2_TOOLCHAIN_HEADERS_AT_LEAST_3_8),y)
