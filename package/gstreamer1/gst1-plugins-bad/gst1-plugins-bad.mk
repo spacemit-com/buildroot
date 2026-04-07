@@ -15,7 +15,7 @@ GST1_PLUGINS_BAD_LICENSE = LGPL-2.0+
 GST1_PLUGINS_BAD_CPE_ID_VENDOR = freedesktop
 GST1_PLUGINS_BAD_CPE_ID_PRODUCT = gst-plugins-bad
 
-GST1_PLUGINS_BAD_CFLAGS = $(TARGET_CFLAGS) -std=c99 -D_GNU_SOURCE
+GST1_PLUGINS_BAD_CFLAGS = $(TARGET_CFLAGS) -std=c99 -D_GNU_SOURCE -Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration -Wno-error=format -Wno-unused-variable -Wno-unused-function
 GST1_PLUGINS_BAD_LDFLAGS = $(TARGET_LDFLAGS) $(TARGET_NLS_LIBS)
 
 GST1_PLUGINS_BAD_CONF_OPTS = \
