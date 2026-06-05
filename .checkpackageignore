@@ -33,11 +33,6 @@ package/dhcp/S80dhcp-relay Shellcheck Variables
 package/dhcp/S80dhcp-server Shellcheck Variables
 package/dhcp/dhclient-script Shellcheck TrailingSpace
 package/dhcpcd/S41dhcpcd Indent Variables
-package/dhrystone/0001-cmdline-nruns.patch Sob
-package/dhrystone/0002-HZ.patch Sob
-package/dhrystone/0003-exit.patch Sob
-package/dhrystone/0004-headers.patch Sob
-package/dhrystone/0005-prototypes.patch Sob
 package/directfb-examples/0001-remove-bzero.patch Sob
 package/dmraid/S20dmraid Variables
 package/dnsmasq/S80dnsmasq Shellcheck Variables
@@ -127,6 +122,8 @@ package/nfs-utils/S60nfs ConsecutiveEmptyLines Shellcheck Variables
 package/nginx/S50nginx Indent Variables
 package/nodm/S90nodm Indent Shellcheck Variables
 package/nss-pam-ldapd/S45nslcd EmptyLastLine Indent Shellcheck Variables
+package/ntp/0001-nano.patch Upstream
+package/ntp/0002-ntp-syscalls-fallback.patch Upstream
 package/ntp/S49ntp.in Variables
 package/ofono/S46ofono Variables
 package/olsr/S50olsr Indent Shellcheck Variables
